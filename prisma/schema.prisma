@@ -1,0 +1,365 @@
+// ============================================================
+// chiro-saas — Prisma Schema
+// ルール: 全テーブルに tenant_id を必ず付与すること。
+//         クエリ時は必ず tenant_id でフィルタリングすること。
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // Supabase 接続プール (pgBouncer)
+  directUrl = env("DIRECT_URL")     // Supabase ダイレクト接続 (prisma migrate 用)
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum TenantPlan {
+  standard
+  pro
+}
+
+/// Profile のロール。super_admin は Supabase の別テーブルで管理する。
+enum UserRole {
+  admin  // tenant_admin 相当
+  staff
+}
+
+enum AppointmentStatus {
+  pending    // 仮受付（初期状態）
+  confirmed  // 確定（承認済）
+  cancelled  // キャンセル
+  no_show    // 無断欠席
+  completed  // 施術完了
+}
+
+/// カルテのモード。記録時点のスナップショットとして保持する。
+enum KarteMode {
+  simple       // B院デフォルト: 症状テキスト・経過メモのみ
+  professional // A院: 部位選択・写真・動画・施術内容を含む
+}
+
+enum ConditionStatus {
+  good   // 良好
+  fair   // 普通
+  pain   // 痛い
+  severe // 強い痛み
+}
+
+enum MediaType {
+  image
+  video
+}
+
+enum NotificationChannel {
+  line
+  email
+}
+
+/// CLAUDE.md 規約: デフォルトのリマインダー送信タイミングは 24h前 と 2h前
+enum NotificationType {
+  confirmation  // 予約確定通知
+  reminder_24h  // リマインダー (24時間前)
+  reminder_2h   // リマインダー (2時間前)
+  cancellation  // キャンセル通知
+}
+
+enum NotificationStatus {
+  pending  // 送信待ち
+  sent     // 送信済み
+  failed   // 送信失敗
+}
+
+// ============================================================
+// 1. テナント基盤
+// ============================================================
+
+/// 整骨院（テナント）の基本情報。全テーブルの親となる。
+model Tenant {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String     @db.VarChar(255)
+  subdomain   String?    @unique @db.VarChar(64)
+  logoUrl     String?    @map("logo_url")
+  colorTheme  Json?      @map("color_theme") // {"primary": "#3B82F6", "accent": "#10B981"}
+  plan        TenantPlan @default(standard)
+  isActive    Boolean    @default(true) @map("is_active")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  settings          TenantSetting[]
+  profiles          Profile[]
+  patients          Patient[]
+  appointments      Appointment[]
+  kartes            Karte[]
+  exercises         Exercise[]
+  notificationQueue NotificationQueue[]
+
+  @@map("tenants")
+}
+
+/// フィーチャートグル設定テーブル。
+/// テナントごとに karte_mode, training_record 等のキーと値を保持する。
+/// CLAUDE.md 規約: TenantFeatureService を介して参照すること。直接クエリ禁止。
+model TenantSetting {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  featureKey   String   @map("feature_key") @db.VarChar(64)
+  featureValue String   @map("feature_value") // 'true' | 'false' | 数値文字列 | enum文字列
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, featureKey])
+  @@index([tenantId])
+  @@map("tenant_settings")
+}
+
+// ============================================================
+// 2. 認証・ユーザー（スタッフ / 管理者）
+// ============================================================
+
+/// Supabase Auth (auth.users) と紐付くスタッフ・管理者プロフィール。
+/// id は Supabase Auth の UUID をそのまま使用する。
+/// CLAUDE.md 規約: 認証は Supabase Auth のセッション管理を利用すること。
+model Profile {
+  id          String   @id @db.Uuid // = supabase auth.users.id
+  tenantId    String   @map("tenant_id") @db.Uuid
+  email       String   @db.VarChar(255)
+  displayName String   @map("display_name") @db.VarChar(255)
+  role        UserRole
+  avatarUrl   String?  @map("avatar_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // 予約との関連
+  assignedAppointments Appointment[]    @relation("StaffAppointments")
+  confirmedAppointments Appointment[]   @relation("ConfirmedByProfile")
+  cancelledAppointments Appointment[]   @relation("CancelledByProfile")
+  appointmentLogs      AppointmentLog[]
+  kartes               Karte[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("profiles")
+}
+
+// ============================================================
+// 3. 業務コア
+// ============================================================
+
+/// 患者情報。LINE連携用の line_user_id を保持する。
+model Patient {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  displayName      String    @map("display_name") @db.VarChar(255)
+  email            String?   @db.VarChar(255)
+  phone            String?   @db.VarChar(20)
+  birthDate        DateTime? @map("birth_date") @db.Date
+  lineUserId       String?   @map("line_user_id") @db.VarChar(64) // LINE ユーザーID
+  emergencyContact String?   @map("emergency_contact") @db.VarChar(255)
+  memo             String?   // 院内メモ（患者非表示）
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments      Appointment[]
+  kartes            Karte[]
+  notificationQueue NotificationQueue[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([tenantId, lineUserId])
+  @@map("patients")
+}
+
+/// 予約情報。
+/// CLAUDE.md 規約:
+///   - ステータスは必ず pending → confirmed の順を経ること
+///   - ステータス変更は必ず AppointmentLog に記録すること
+///   - require_approval トグルは全テナント必須（OFF不可）
+model Appointment {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  patientId   String            @map("patient_id") @db.Uuid
+  staffId     String?           @map("staff_id") @db.Uuid // NULL = スタッフ指名なし (staff_assignment=false 時)
+  menuName    String            @map("menu_name") @db.VarChar(255) // 施術メニュー名（スナップショット）
+  durationMin Int               @map("duration_min") // 所要時間（分）
+  price       Int               // 料金（円）
+  status      AppointmentStatus @default(pending)
+  startAt     DateTime          @map("start_at") @db.Timestamptz
+  endAt       DateTime          @map("end_at") @db.Timestamptz
+  note        String?           // 患者からの備考
+
+  // 承認情報
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz
+  confirmedBy String?   @map("confirmed_by") @db.Uuid
+
+  // キャンセル情報
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz
+  cancelledBy String?   @map("cancelled_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient         Patient            @relation(fields: [patientId], references: [id])
+  staff           Profile?           @relation("StaffAppointments", fields: [staffId], references: [id])
+  confirmedByUser Profile?           @relation("ConfirmedByProfile", fields: [confirmedBy], references: [id])
+  cancelledByUser Profile?           @relation("CancelledByProfile", fields: [cancelledBy], references: [id])
+  logs            AppointmentLog[]
+  karte           Karte?
+  notificationQueue NotificationQueue[]
+
+  @@index([tenantId, startAt])
+  @@index([tenantId, patientId])
+  @@index([tenantId, staffId])
+  @@index([tenantId, status])
+  @@map("appointments")
+}
+
+/// 予約ステータス変更履歴。
+/// CLAUDE.md 規約: ステータス変更時は必ずこのテーブルに記録すること（絶対ルール）。
+model AppointmentLog {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appointmentId String            @map("appointment_id") @db.Uuid
+  oldStatus     AppointmentStatus @map("old_status")
+  newStatus     AppointmentStatus @map("new_status")
+  changedById   String            @map("changed_by_id") @db.Uuid
+  note          String?           // 変更理由など
+  changedAt     DateTime          @default(now()) @map("changed_at") @db.Timestamptz
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  changedBy   Profile     @relation(fields: [changedById], references: [id])
+
+  @@index([appointmentId])
+  @@map("appointment_logs")
+}
+
+/// 施術記録（カルテ）。
+/// simple モード: conditionNote, progressNote のみ使用。
+/// professional モード (A院): 上記 + bodyParts, treatments, conditionStatus, KarteMedia を使用。
+/// CLAUDE.md 規約: karteModeSnapshot で記録時点のモードを保持すること（設定変更後も参照可能）。
+model Karte {
+  id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String         @map("tenant_id") @db.Uuid
+  appointmentId       String?        @unique @map("appointment_id") @db.Uuid
+  patientId           String         @map("patient_id") @db.Uuid
+  staffId             String?        @map("staff_id") @db.Uuid
+  karteModeSnapshot   KarteMode      @map("karte_mode_snapshot") // 記録時点のモードを固定保存
+
+  // simple / professional 共通
+  conditionNote       String?        @map("condition_note")   // 症状メモ
+  progressNote        String?        @map("progress_note")    // 経過メモ
+
+  // professional モードのみ使用
+  conditionStatus     ConditionStatus? @map("condition_status") // 状態評価
+  bodyParts           String[]       @map("body_parts")       // 部位選択（例: ["腰", "首"]）
+  treatments          String[]       // 施術内容（例: ["アクチベーター", "指圧"]）
+
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  patient     Patient      @relation(fields: [patientId], references: [id])
+  staff       Profile?     @relation(fields: [staffId], references: [id])
+
+  // professional モードのみ利用する子テーブル
+  media           KarteMedia[]
+  exerciseRecords ExerciseRecord[]
+
+  @@index([tenantId, patientId])
+  @@index([tenantId, appointmentId])
+  @@map("kartes")
+}
+
+/// カルテ添付ファイル（写真・動画）。professional モードのみ使用。
+/// CLAUDE.md 規約:
+///   - ストレージは Supabase Storage + RLS を使用すること
+///   - fileUrl には署名付きURL（Signed URL）を生成して返すこと（公開URLは禁止）
+///   - 1ファイル最大 50MB のバリデーションを実装すること
+model KarteMedia {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  karteId     String    @map("karte_id") @db.Uuid
+  storagePath String    @map("storage_path")         // Supabase Storage 上のパス（Signed URL生成に使用）
+  mediaType   MediaType @map("media_type")
+  fileSizeKb  Int?      @map("file_size_kb")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  karte Karte @relation(fields: [karteId], references: [id], onDelete: Cascade)
+
+  @@index([karteId])
+  @@map("karte_media")
+}
+
+/// トレーニング種目マスタ。training_record トグルが有効な場合（A院）に使用。
+/// CLAUDE.md 規約: 一般的な種目をプリセットし、管理画面から tenant_admin が CRUD 操作可能とする。
+model Exercise {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(255) // 種目名（例: "スクワット"）
+  category  String?  @db.VarChar(64)  // カテゴリ（例: "下半身", "体幹"）
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  records ExerciseRecord[]
+
+  @@index([tenantId])
+  @@map("exercises")
+}
+
+/// トレーニング実施記録。Karte に紐付く。
+model ExerciseRecord {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  karteId    String   @map("karte_id") @db.Uuid
+  exerciseId String   @map("exercise_id") @db.Uuid
+  sets       Int?
+  reps       Int?
+  weightKg   Decimal? @map("weight_kg") @db.Decimal(5, 2)
+  durationSec Int?    @map("duration_sec")
+  memo       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  karte    Karte    @relation(fields: [karteId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id])
+
+  @@index([tenantId, karteId])
+  @@map("exercise_records")
+}
+
+// ============================================================
+// 4. 通知管理
+// ============================================================
+
+/// LINE / メール通知の送信キュー。
+/// CLAUDE.md 規約:
+///   - デフォルトのリマインダー送信タイミングは 予約24時間前 と 2時間前
+///   - 送信チャネルは LINE Messaging API を使用する
+model NotificationQueue {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  appointmentId    String             @map("appointment_id") @db.Uuid
+  patientId        String             @map("patient_id") @db.Uuid
+  channel          NotificationChannel
+  notificationType NotificationType   @map("notification_type")
+  scheduledAt      DateTime           @map("scheduled_at") @db.Timestamptz // 送信予定日時
+  status           NotificationStatus @default(pending)
+  sentAt           DateTime?          @map("sent_at") @db.Timestamptz
+  errorMessage     String?            @map("error_message")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient     Patient     @relation(fields: [patientId], references: [id])
+
+  @@index([tenantId, scheduledAt, status]) // バッチ処理での未送信キュー取得用
+  @@index([appointmentId])
+  @@map("notification_queue")
+}
