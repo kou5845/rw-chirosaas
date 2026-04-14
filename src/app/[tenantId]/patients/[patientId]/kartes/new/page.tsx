@@ -13,6 +13,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { KarteNewForm } from "@/components/karte/KarteNewForm";
 import type { KarteMode } from "@prisma/client";
+import type { PreviousRecord } from "@/components/karte/TrainingRecordSection";
 
 type Props = {
   params: Promise<{ tenantId: string; patientId: string }>;
@@ -23,34 +24,26 @@ export default async function KarteNewPage({ params }: Props) {
 
   // ── テナントをサブドメイン（スラッグ）で解決 ────────────────────
   const tenant = await prisma.tenant.findUnique({
-    where: { subdomain: slug },
+    where:  { subdomain: slug },
     select: { id: true, name: true },
   });
   if (!tenant) notFound();
 
-  // ── セキュリティ: 患者を tenantId + patientId で検索（クロステナント防止）──
-  // CLAUDE.md 絶対ルール: patientId と tenantId の組み合わせで必ず検索すること
+  // ── セキュリティ: 患者を tenantId + patientId で検索 ────────────
   const patient = await prisma.patient.findFirst({
-    where: {
-      id:       patientId,
-      tenantId: tenant.id, // ← 他テナントの患者IDを指定しても必ずここで弾く
-    },
+    where: { id: patientId, tenantId: tenant.id },
     select: { id: true, displayName: true },
   });
   if (!patient) notFound();
 
-  // ── フィーチャートグル取得（CLAUDE.md: 直接DBクエリを最小限に抑える）──
+  // ── フィーチャートグル取得 ────────────────────────────────────
   const [karteFeature, trainingFeature] = await Promise.all([
     prisma.tenantSetting.findUnique({
-      where: {
-        tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" },
-      },
+      where: { tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" } },
       select: { featureValue: true },
     }),
     prisma.tenantSetting.findUnique({
-      where: {
-        tenantId_featureKey: { tenantId: tenant.id, featureKey: "training_record" },
-      },
+      where: { tenantId_featureKey: { tenantId: tenant.id, featureKey: "training_record" } },
       select: { featureValue: true },
     }),
   ]);
@@ -59,18 +52,64 @@ export default async function KarteNewPage({ params }: Props) {
   const trainingEnabled = trainingFeature?.featureValue === "true";
   const karteModeSnapshot: KarteMode = isProfessional ? "professional" : "simple";
 
-  // ── トレーニング種目マスタ（professional + training_record ON のみ取得）──
+  // ── トレーニング種目マスタ（unit フィールド含む）────────────────
   const exercises =
     isProfessional && trainingEnabled
       ? await prisma.exercise.findMany({
-          where: {
-            tenantId: tenant.id, // CLAUDE.md 絶対ルール
-            isActive: true,
-          },
-          select: { id: true, name: true, category: true },
+          where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
+          select:  { id: true, name: true, category: true, unit: true },
           orderBy: [{ category: "asc" }, { name: "asc" }],
         })
       : [];
+
+  // ── 前回記録: 各種目の直近の ExerciseRecord を患者ごとに取得 ─────
+  // 同一患者・同一種目の最新記録を種目ごとに1件ずつ取得する
+  let previousRecords: PreviousRecord[] = [];
+
+  if (exercises.length > 0) {
+    const exerciseIds = exercises.map((e) => e.id);
+
+    // kartes → exerciseRecords の結合クエリで種目ごと最新を取得
+    const kartes = await prisma.karte.findMany({
+      where: {
+        tenantId:  tenant.id,  // CLAUDE.md 絶対ルール
+        patientId: patient.id,
+        exerciseRecords: { some: { exerciseId: { in: exerciseIds } } },
+      },
+      select: {
+        createdAt: true,
+        exerciseRecords: {
+          where:  { exerciseId: { in: exerciseIds } },
+          select: {
+            exerciseId:  true,
+            sets:        true,
+            reps:        true,
+            weightKg:    true,
+            durationSec: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // 種目ごとに最初に見つかった（=最新の）記録を採用
+    const seen = new Set<string>();
+    for (const karte of kartes) {
+      for (const rec of karte.exerciseRecords) {
+        if (!seen.has(rec.exerciseId)) {
+          seen.add(rec.exerciseId);
+          previousRecords.push({
+            exerciseId:  rec.exerciseId,
+            sets:        rec.sets,
+            reps:        rec.reps,
+            weightKg:    rec.weightKg ? rec.weightKg.toString() : null,
+            durationSec: rec.durationSec,
+            recordedAt:  karte.createdAt.toISOString(),
+          });
+        }
+      }
+    }
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -101,23 +140,16 @@ export default async function KarteNewPage({ params }: Props) {
               </p>
               <h1 className="text-lg font-bold text-white">新規カルテ登録</h1>
             </div>
-            {/* モードバッジ */}
             <div className="ml-auto">
-              {isProfessional ? (
-                <span className="rounded-full border border-white/30 bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-                  Professional モード
-                </span>
-              ) : (
-                <span className="rounded-full border border-white/30 bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-                  Simple モード
-                </span>
-              )}
+              <span className="rounded-full border border-white/30 bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+                {isProfessional ? "Professional モード" : "Simple モード"}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── フォーム本体（KarteNewForm が mode に応じてフィールドを切り替える）── */}
+      {/* ── フォーム本体 ── */}
       <KarteNewForm
         tenantId={tenant.id}
         tenantSlug={slug}
@@ -127,6 +159,7 @@ export default async function KarteNewPage({ params }: Props) {
         isProfessional={isProfessional}
         trainingEnabled={trainingEnabled}
         exercises={exercises}
+        previousRecords={previousRecords}
       />
     </div>
   );

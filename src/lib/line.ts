@@ -64,6 +64,8 @@ type NotificationTemplateArgs = {
   price:       number;
   startAt:     Date;
   endAt:       Date;
+  phone?:      string | null;
+  address?:    string | null;
 };
 
 /** 曜日ラベル */
@@ -81,8 +83,8 @@ function fmtTime(d: Date): string {
  * 予約確定通知のメッセージ文字列を生成する。
  */
 export function buildConfirmationMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, price, startAt, endAt } = args;
-  return [
+  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address } = args;
+  const lines = [
     "【ご予約確定のお知らせ】",
     `${tenantName} のご予約が確定しました。`,
     "",
@@ -91,7 +93,15 @@ export function buildConfirmationMessage(args: NotificationTemplateArgs): string
     `💴 ¥${price.toLocaleString("ja-JP")}`,
     "",
     "ご来院をお待ちしております。",
-  ].join("\n");
+  ];
+  if (address) {
+    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    lines.push("", `📍 ${address}`, `🗺 ${mapUrl}`);
+  }
+  if (phone) {
+    lines.push("", `変更・キャンセルはお電話にて承ります：${phone}`);
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -128,6 +138,32 @@ export function buildReminder2hMessage(args: NotificationTemplateArgs): string {
 }
 
 /**
+ * 予約受付通知のメッセージ文字列を生成する（pending 作成直後に送信）。
+ */
+export function buildReceptionMessage(args: NotificationTemplateArgs): string {
+  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address } = args;
+  const lines = [
+    "【ご予約受付のお知らせ】",
+    `${tenantName} にてご予約を受け付けました。`,
+    "",
+    `📅 ${fmtDate(startAt)} ${fmtTime(startAt)}〜${fmtTime(endAt)}`,
+    `💆 ${menuName}（${durationMin}分）`,
+    `💴 ¥${price.toLocaleString("ja-JP")}`,
+    "",
+    "内容を確認後、確定の通知をお送りします。",
+    "しばらくお待ちください。",
+  ];
+  if (address) {
+    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    lines.push("", `📍 ${address}`, `🗺 ${mapUrl}`);
+  }
+  if (phone) {
+    lines.push("", `変更・キャンセルはお電話にて承ります：${phone}`);
+  }
+  return lines.join("\n");
+}
+
+/**
  * キャンセル通知のメッセージ文字列を生成する。
  */
 export function buildCancellationMessage(args: NotificationTemplateArgs): string {
@@ -144,6 +180,30 @@ export function buildCancellationMessage(args: NotificationTemplateArgs): string
 }
 
 /**
+ * 予約日時変更通知のメッセージ文字列を生成する。
+ */
+export function buildUpdateMessage(args: NotificationTemplateArgs & {
+  oldStartAt: Date;
+  oldEndAt:   Date;
+}): string {
+  const { tenantName, menuName, durationMin, startAt, endAt, oldStartAt, oldEndAt, phone } = args;
+  return [
+    "【ご予約変更のお知らせ】",
+    `${tenantName} のご予約日時が変更されました。`,
+    "",
+    "▼ 変更前",
+    `📅 ${fmtDate(oldStartAt)} ${fmtTime(oldStartAt)}〜${fmtTime(oldEndAt)}`,
+    "",
+    "▼ 変更後",
+    `📅 ${fmtDate(startAt)} ${fmtTime(startAt)}〜${fmtTime(endAt)}`,
+    `💆 ${menuName}（${durationMin}分）`,
+    "",
+    "ご不明な点はお問い合わせください。",
+    ...(phone ? [`📞 ${phone}`] : []),
+  ].join("\n");
+}
+
+/**
  * notificationType に応じたメッセージ文字列を返すディスパッチ関数。
  */
 export function buildNotificationMessage(
@@ -151,6 +211,7 @@ export function buildNotificationMessage(
   args: NotificationTemplateArgs
 ): string {
   switch (notificationType) {
+    case "reception":     return buildReceptionMessage(args);
     case "confirmation":  return buildConfirmationMessage(args);
     case "reminder_24h":  return buildReminder24hMessage(args);
     case "reminder_2h":   return buildReminder2hMessage(args);

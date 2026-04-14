@@ -22,6 +22,8 @@ import {
   ChevronsRight,
   CalendarOff,
   CalendarPlus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
@@ -73,6 +75,15 @@ export type Props = {
   draggingId?:   string | null;
   /** 予約スロットの刻み幅（分）: 15 | 20 | 30 | 60 */
   slotInterval?: number;
+  /**
+   * DnD: ドラッグ中のスナップ先を示すインジケーター。
+   * AppointmentsWeekView が onDragMove で計算して渡す。
+   */
+  dragIndicator?: { dayIdx: number; top: number; timeStr: string } | null;
+  /** 予約カード詳細モーダルの「編集」ボタンが押されたときに呼ばれる */
+  onEditAppt?:   (appt: SerializedAppointment) => void;
+  /** 予約カード詳細モーダルの「削除」ボタンが押されたときに呼ばれる */
+  onDeleteAppt?: (apptId: string) => void;
 };
 
 // ─── 定数 ───────────────────────────────────────────────────────────────────
@@ -273,13 +284,16 @@ function NowIndicator({ gridStartHour }: { gridStartHour: number }) {
 // ─── 予約詳細モーダル ─────────────────────────────────────────────────────────
 
 function ApptDetailModal({
-  appt, slug, onClose,
+  appt, slug, onClose, onEdit, onDelete,
 }: {
-  appt: SerializedAppointment;
-  slug: string;
-  onClose: () => void;
+  appt:     SerializedAppointment;
+  slug:     string;
+  onClose:  () => void;
+  onEdit?:  (appt: SerializedAppointment) => void;
+  onDelete?: (apptId: string) => void;
 }) {
   const cfg = STATUS_CFG[appt.status];
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -350,6 +364,43 @@ function ApptDetailModal({
             患者詳細を見る
             <ChevronsRight size={13} />
           </Link>
+
+          {/* 編集・削除ボタン（pending / confirmed のみ表示）*/}
+          {(appt.status === "pending" || appt.status === "confirmed") && (onEdit || onDelete) && (
+            <div className="flex gap-2">
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={() => { onEdit(appt); onClose(); }}
+                  className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  <Pencil size={13} />
+                  編集
+                </button>
+              )}
+              {onDelete && (
+                confirmDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => { onDelete(appt.id); onClose(); }}
+                    className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-red-300 bg-red-50 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100"
+                  >
+                    <Trash2 size={13} />
+                    本当に削除
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 size={13} />
+                    削除
+                  </button>
+                )
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -463,6 +514,9 @@ export function WeeklyCalendar({
   scrollAreaRef,
   draggingId,
   slotInterval = 30,
+  dragIndicator = null,
+  onEditAppt,
+  onDeleteAppt,
 }: Props) {
   const bhMap = buildBhMap(businessHours);
   const { gridStartHour, gridEndHour } = calcGridRange(businessHours);
@@ -753,7 +807,7 @@ export function WeeklyCalendar({
                   {/* 現在時刻インジケータ */}
                   {isToday && <NowIndicator gridStartHour={gridStartHour} />}
 
-                  {/* ホバースロットインジケータ（DnD中は非表示）*/}
+                  {/* 通常ホバー インジケータ（DnD非アクティブ時のみ）*/}
                   {onSlotClick && !isHoliday && !isDnDActive && hoverSlot?.dayIdx === dayIdx && (
                     <div
                       className="pointer-events-none absolute left-0 right-0 z-30 flex items-center"
@@ -763,6 +817,18 @@ export function WeeklyCalendar({
                       <span className="ml-1 rounded bg-[var(--brand)] px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
                         {hoverSlot.timeStr}
                       </span>
+                    </div>
+                  )}
+
+                  {/* ドラッグ中スナップ インジケータ（ライン）
+                      バッジは DragOverlay 内の DragCardPreview に表示するため、
+                      ここではラインのみ描画する（DragOverlay の z-index に隠れないよう）。 */}
+                  {!isHoliday && isDnDActive && dragIndicator?.dayIdx === dayIdx && (
+                    <div
+                      className="pointer-events-none absolute left-0 right-0 z-30"
+                      style={{ top: `${dragIndicator.top}px` }}
+                    >
+                      <div className="h-0.5 border-t-2 border-dashed border-[var(--brand)]" />
                     </div>
                   )}
 
@@ -788,7 +854,13 @@ export function WeeklyCalendar({
 
       {/* 予約詳細モーダル */}
       {selectedAppt && (
-        <ApptDetailModal appt={selectedAppt} slug={slug} onClose={handleClose} />
+        <ApptDetailModal
+          appt={selectedAppt}
+          slug={slug}
+          onClose={handleClose}
+          onEdit={onEditAppt}
+          onDelete={onDeleteAppt}
+        />
       )}
     </div>
   );

@@ -24,10 +24,12 @@ import {
   useSensors,
   type DragStartEvent,
   type DragEndEvent,
+  type DragMoveEvent,
 } from "@dnd-kit/core";
 import { WeeklyCalendar, type SerializedAppointment, type BusinessHourData, HOUR_HEIGHT } from "./WeeklyCalendar";
-import { NewAppointmentDialog } from "./NewAppointmentDialog";
+import { NewAppointmentDialog, type EditModeData } from "./NewAppointmentDialog";
 import { rescheduleAppointment } from "@/app/[tenantId]/appointments/reschedule-action";
+import { deleteAppointment } from "@/app/[tenantId]/appointments/delete-action";
 
 // ─── 型定義 ──────────────────────────────────────────────────────────────────
 
@@ -97,6 +99,60 @@ function calcGridStartHour(businessHours: BusinessHourData[]): number {
   if (openDays.length === 0) return 9;
   const startMin = Math.min(...openDays.map((bh) => timeToMin(bh.openTime)));
   return Math.floor(startMin / 60);
+}
+
+// ─── 共通スナップ計算 ────────────────────────────────────────────────────────
+
+type SnapResult = {
+  dayIdx:     number; // 0=月 〜 6=日
+  snappedMin: number; // 絶対分（クランプ済み）
+  top:        number; // グリッド内 Y px（表示用）
+  timeStr:    string; // "HH:mm"
+};
+
+/**
+ * ドラッグ中カードの translatedRect から
+ * - どの曜日列（dayIdx）
+ * - 何分（slotInterval スナップ）
+ * を計算する共通ロジック。
+ *
+ * handleDragMove / handleDragEnd の両方でこの関数を使うことで
+ * 「インジケーターが示す時刻」と「実際に確定される時刻」を完全に一致させる。
+ */
+function computeSnapFromRect(
+  rect:          { top: number; left: number; width: number },
+  gridEl:        HTMLDivElement,
+  scrollEl:      HTMLDivElement,
+  gridStartHour: number,
+  slotInterval:  number,
+): SnapResult | null {
+  const gridRect         = gridEl.getBoundingClientRect();
+  const TIME_COL_WIDTH   = 56;
+  const gridContentWidth = gridRect.width - TIME_COL_WIDTH;
+  if (gridContentWidth <= 0) return null;
+
+  // X: 中央座標でどの曜日列か判定（端クリック時の誤検知を防ぐ）
+  const dayWidth    = gridContentWidth / 7;
+  const cardCenterX = rect.left + rect.width / 2;
+  const relX        = cardCenterX - gridRect.left - TIME_COL_WIDTH;
+  const dayIdx      = Math.max(0, Math.min(6, Math.floor(relX / dayWidth)));
+
+  // Y: スクロール量を加算してグリッド内絶対座標に変換
+  const relY      = rect.top - gridRect.top + scrollEl.scrollTop;
+  const rawMin    = (relY / HOUR_HEIGHT) * 60;
+  const absMin    = gridStartHour * 60 + rawMin;
+
+  // slotInterval スナップ → グリッド開始未満にはクランプ
+  const snapped   = Math.round(absMin / slotInterval) * slotInterval;
+  const clamped   = Math.max(gridStartHour * 60, snapped);
+
+  const offsetMin = clamped - gridStartHour * 60;
+  const top       = (offsetMin / 60) * HOUR_HEIGHT;
+  const h         = Math.floor(clamped / 60);
+  const m         = clamped % 60;
+  const timeStr   = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+
+  return { dayIdx, snappedMin: clamped, top, timeStr };
 }
 
 /**
@@ -178,46 +234,75 @@ function MiniToast({ items }: { items: ToastItem[] }) {
 
 // ─── DragOverlay カードプレビュー ─────────────────────────────────────────────
 
-function DragCardPreview({ appt }: { appt: SerializedAppointment }) {
+/**
+ * ドラッグ中に浮かぶカードプレビュー。
+ * snapTimeStr が渡された場合、カード右横にスナップ先の時刻バッジを表示する。
+ * バッジは DragOverlay 内に同梱されるため z-index の影響を受けず、
+ * グリッド列内のインジケーターラインに隠れることがない。
+ */
+function DragCardPreview({
+  appt,
+  snapTimeStr,
+}: {
+  appt:         SerializedAppointment;
+  snapTimeStr?: string;
+}) {
   const statusColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
     pending:   { bg: "bg-amber-50",    border: "border-amber-300",  text: "text-amber-900",   accent: "bg-amber-400" },
     confirmed: { bg: "bg-[#E8F7F8]",   border: "border-[#91D2D9]",  text: "text-[#1a6a72]",   accent: "bg-[#91D2D9]" },
   };
-  const cfg = statusColors[appt.status] ?? statusColors.confirmed;
-  const isShort = appt.durationMin <= 30;
+  const cfg      = statusColors[appt.status] ?? statusColors.confirmed;
+  const isShort  = appt.durationMin <= 30;
   const heightPx = Math.max((appt.durationMin / 60) * HOUR_HEIGHT - 4, 28);
 
-  // 時刻フォーマット
   const fmtTime = (iso: string) => {
     const d = new Date(iso);
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
 
   return (
-    <div
-      className={[
-        "overflow-hidden rounded-lg border text-left shadow-2xl",
-        "cursor-grabbing opacity-95 ring-2 ring-[var(--brand)]/30",
-        cfg.bg, cfg.border,
-      ].join(" ")}
-      style={{ width: "140px", height: `${heightPx}px` }}
-    >
-      <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l ${cfg.accent}`} />
-      <div className={`pl-2 pr-1 ${isShort ? "py-0.5" : "py-1"}`}>
-        <p className={`truncate font-semibold leading-tight ${cfg.text} ${isShort ? "text-[10px]" : "text-[11px]"}`}>
-          {appt.patientName}
-        </p>
-        {!isShort && (
-          <p className="truncate text-[10px] leading-tight text-gray-500">
-            {appt.menuName}
+    // 外枠を relative にしてバッジを絶対配置する
+    <div className="relative" style={{ width: "140px", height: `${heightPx}px` }}>
+      {/* カード本体 */}
+      <div
+        className={[
+          "absolute inset-0 overflow-hidden rounded-lg border text-left shadow-2xl",
+          "cursor-grabbing opacity-95 ring-2 ring-[var(--brand)]/30",
+          cfg.bg, cfg.border,
+        ].join(" ")}
+      >
+        <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l ${cfg.accent}`} />
+        <div className={`pl-2 pr-1 ${isShort ? "py-0.5" : "py-1"}`}>
+          <p className={`truncate font-semibold leading-tight ${cfg.text} ${isShort ? "text-[10px]" : "text-[11px]"}`}>
+            {appt.patientName}
           </p>
-        )}
-        {!isShort && (
-          <p className={`mt-0.5 text-[10px] leading-none opacity-70 ${cfg.text}`}>
-            {fmtTime(appt.startAt)}〜
-          </p>
-        )}
+          {!isShort && (
+            <p className="truncate text-[10px] leading-tight text-gray-500">
+              {appt.menuName}
+            </p>
+          )}
+          {!isShort && (
+            <p className={`mt-0.5 text-[10px] leading-none opacity-70 ${cfg.text}`}>
+              {fmtTime(appt.startAt)}〜
+            </p>
+          )}
+        </div>
       </div>
+
+      {/* スナップタイムバッジ（カード右横に常時表示）
+          DragOverlay 内に同梱されているため z-index 競合なし */}
+      {snapTimeStr && (
+        <span
+          className={[
+            "absolute top-1 left-full ml-1.5",
+            "whitespace-nowrap rounded-md px-2 py-0.5",
+            "text-[11px] font-bold text-white",
+            "bg-[var(--brand)] shadow-lg ring-2 ring-white/70",
+          ].join(" ")}
+        >
+          {snapTimeStr}
+        </span>
+      )}
     </div>
   );
 }
@@ -238,7 +323,7 @@ export function AppointmentsWeekView({
   staffList,
   patientList,
 }: Props) {
-  // ── モーダル状態 ──
+  // ── 新規作成モーダル状態 ──
   const [modalOpen,    setModalOpen]   = useState(false);
   const [initialDate,  setInitialDate] = useState<string | undefined>(undefined);
   const [initialTime,  setInitialTime] = useState<string | undefined>(undefined);
@@ -248,6 +333,9 @@ export function AppointmentsWeekView({
     setInitialTime(time);
     setModalOpen(true);
   }
+
+  // ── 編集モーダル状態 ──
+  const [editMode, setEditMode] = useState<EditModeData | null>(null);
 
   // ── 楽観的更新のための予約リスト ──
   const [localAppts, setLocalAppts] = useState<SerializedAppointment[]>(initialAppointments);
@@ -259,6 +347,9 @@ export function AppointmentsWeekView({
 
   // ── DnD: ドラッグ中の予約 ──
   const [activeAppt, setActiveAppt] = useState<SerializedAppointment | null>(null);
+
+  // ── DnD: リアルタイムスナップインジケーター ──
+  const [dragIndicator, setDragIndicator] = useState<{ dayIdx: number; top: number; timeStr: string } | null>(null);
 
   // ── DnD: グリッド ref（座標計算に使用）──
   const calGridRef    = useRef<HTMLDivElement>(null);
@@ -276,6 +367,47 @@ export function AppointmentsWeekView({
     }, 3500);
   }, []);
 
+  // ── 編集ハンドラー ──
+  const handleEditAppt = useCallback((appt: SerializedAppointment) => {
+    const start = new Date(appt.startAt);
+    const dateStr = [
+      start.getFullYear(),
+      String(start.getMonth() + 1).padStart(2, "0"),
+      String(start.getDate()).padStart(2, "0"),
+    ].join("-");
+    const timeStr = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+    setEditMode({
+      appointmentId: appt.id,
+      patientId:     appt.patientId,
+      patientName:   appt.patientName,
+      date:          dateStr,
+      time:          timeStr,
+      menuName:      appt.menuName,
+      durationMin:   appt.durationMin,
+      price:         appt.price,
+      staffId:       null,
+      note:          appt.note,
+    });
+  }, []);
+
+  // ── 削除ハンドラー（楽観的更新）──
+  const handleDeleteAppt = useCallback(async (apptId: string) => {
+    const original = localAppts;
+    setLocalAppts((prev) => prev.filter((a) => a.id !== apptId));
+    try {
+      const result = await deleteAppointment(apptId, slug);
+      if (!result.success) {
+        setLocalAppts(original);
+        showToast(result.error ?? "削除に失敗しました");
+      } else {
+        showToast("予約を削除しました", "success");
+      }
+    } catch {
+      setLocalAppts(original);
+      showToast("通信エラーが発生しました。再度お試しください。");
+    }
+  }, [localAppts, slug, showToast]);
+
   // ── DnD: センサー設定（5px 動かしてからDnD開始 → クリックと区別）──
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -291,49 +423,52 @@ export function AppointmentsWeekView({
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const appt = event.active.data.current?.appt as SerializedAppointment | undefined;
     if (appt) setActiveAppt(appt);
+    setDragIndicator(null);
   }, []);
 
+  // ── DnD: ドラッグ移動（リアルタイムインジケーター更新）──
+  const handleDragMove = useCallback((event: DragMoveEvent) => {
+    const translatedRect = event.active.rect.current.translated;
+    if (!translatedRect) { setDragIndicator(null); return; }
+
+    const gridEl   = calGridRef.current;
+    const scrollEl = scrollAreaRef.current;
+    if (!gridEl || !scrollEl) { setDragIndicator(null); return; }
+
+    const snap = computeSnapFromRect(translatedRect, gridEl, scrollEl, gridStartHour, slotInterval);
+    if (snap) {
+      setDragIndicator({ dayIdx: snap.dayIdx, top: snap.top, timeStr: snap.timeStr });
+    } else {
+      setDragIndicator(null);
+    }
+  }, [gridStartHour, slotInterval]);
+
   // ── DnD: ドラッグ終了（メイン処理）──
+  // computeSnapFromRect を使い handleDragMove と全く同じ座標計算を行う。
+  // これにより「インジケーターが示す時刻 = 実際に確定される時刻」が保証される。
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const appt = event.active.data.current?.appt as SerializedAppointment | undefined;
     setActiveAppt(null);
+    setDragIndicator(null); // インジケーターをクリア
 
     if (!appt) return;
 
     // ── 1. ドロップ位置の取得 ──
-    // dnd-kit が管理する「ドロップ後のビューポート座標」を取得
     const droppedRect = event.active.rect.current.translated;
     if (!droppedRect) return;
 
-    const gridEl      = calGridRef.current;
-    const scrollEl    = scrollAreaRef.current;
+    const gridEl   = calGridRef.current;
+    const scrollEl = scrollAreaRef.current;
     if (!gridEl || !scrollEl) return;
 
-    const gridRect = gridEl.getBoundingClientRect();
+    // ── 2 & 3. 共通スナップ計算（handleDragMove と同一ロジック）──
+    const snap = computeSnapFromRect(droppedRect, gridEl, scrollEl, gridStartHour, slotInterval);
+    if (!snap) return;
 
-    // ── 2. X軸: どの日（dayIdx: 0=月 〜 6=日）に落とされたか ──
-    // グリッドは「56px の時間ラベル列 + 均等7列」
-    const TIME_COL_WIDTH = 56;
-    const gridContentWidth = gridRect.width - TIME_COL_WIDTH;
-    const dayWidth  = gridContentWidth / 7;
-    // ドロップしたカードの中央X座標を使う（精度向上）
-    const cardCenterX = droppedRect.left + droppedRect.width / 2;
-    const relX       = cardCenterX - gridRect.left - TIME_COL_WIDTH;
-    const dayIdx     = Math.max(0, Math.min(6, Math.floor(relX / dayWidth)));
-
-    // ── 3. Y軸: 何時何分か（スクロール量を加算して補正）──
-    // droppedRect はビューポート座標。グリッド内の相対Yはスクロールを加算する必要がある。
-    const scrollTop  = scrollEl.scrollTop;
-    // グリッドのビューポート上端 + スクロール量 = グリッド内の絶対上端
-    const relY       = droppedRect.top - gridRect.top + scrollTop;
-    const rawMin     = (relY / HOUR_HEIGHT) * 60; // グリッド開始からの分数
-    const absMin     = gridStartHour * 60 + rawMin; // 絶対分
-    // slotInterval 分スナップ
-    const snappedMin = Math.round(absMin / slotInterval) * slotInterval;
-    const newEndMin  = snappedMin + appt.durationMin;
+    const { dayIdx, snappedMin } = snap;
+    const newEndMin = snappedMin + appt.durationMin;
 
     // ── 4. バリデーション ──
-    // ドロップ先の曜日（週Indexから JS の dayOfWeek へ変換: 月=1,...,日=0）
     const weekStart = parseDateStr(weekStartStr);
     const dropDate  = addDays(weekStart, dayIdx);
     const dayOfWeek = dropDate.getDay(); // 0=日,...,6=土
@@ -352,7 +487,7 @@ export function AppointmentsWeekView({
       return;
     }
 
-    // ── 5. 変更なしチェック（同じ日時にドロップした場合は何もしない）──
+    // ── 5. 変更なしチェック ──
     const origStart = new Date(appt.startAt);
     if (
       isSameDate(origStart, dropDate) &&
@@ -363,13 +498,8 @@ export function AppointmentsWeekView({
 
     // ── 6. 新しいISO文字列を構築 ──
     const newStartAt = new Date(
-      dropDate.getFullYear(),
-      dropDate.getMonth(),
-      dropDate.getDate(),
-      Math.floor(snappedMin / 60),
-      snappedMin % 60,
-      0,
-      0,
+      dropDate.getFullYear(), dropDate.getMonth(), dropDate.getDate(),
+      Math.floor(snappedMin / 60), snappedMin % 60, 0, 0,
     );
     const newEndAt = new Date(newStartAt.getTime() + appt.durationMin * 60 * 1000);
 
@@ -393,7 +523,6 @@ export function AppointmentsWeekView({
       });
 
       if (!result.success) {
-        // サーバー拒否 → ロールバック
         setLocalAppts(originalAppts);
         showToast(result.error ?? "予約の移動に失敗しました");
       } else {
@@ -403,18 +532,17 @@ export function AppointmentsWeekView({
       }
     } catch (err) {
       console.error("[AppointmentsWeekView] rescheduleAppointment error:", err);
-      // 通信エラー → ロールバック
       setLocalAppts(originalAppts);
       showToast("通信エラーが発生しました。再度お試しください。");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localAppts, slug, weekStartStr, gridStartHour, bhMap, lunchStartTime, lunchEndTime, showToast]);
+  }, [localAppts, slug, weekStartStr, gridStartHour, slotInterval, bhMap, lunchStartTime, lunchEndTime, showToast]);
 
   return (
     <>
       <DndContext
         sensors={sensors}
         onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
       >
         <WeeklyCalendar
@@ -426,16 +554,22 @@ export function AppointmentsWeekView({
           lunchStartTime={lunchStartTime}
           lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
+          dragIndicator={dragIndicator}
           onNewAppt={() => openModal()}
           onSlotClick={(date, time) => openModal(date, time)}
           calGridRef={calGridRef}
           scrollAreaRef={scrollAreaRef}
           draggingId={activeAppt?.id ?? null}
+          onEditAppt={handleEditAppt}
+          onDeleteAppt={handleDeleteAppt}
         />
 
-        {/* DragOverlay: ドラッグ中に浮いているカードを表示 */}
+        {/* DragOverlay: ドラッグ中に浮いているカードを表示
+            snapTimeStr を渡してカード右横にスナップ時刻バッジを表示する */}
         <DragOverlay dropAnimation={null}>
-          {activeAppt ? <DragCardPreview appt={activeAppt} /> : null}
+          {activeAppt ? (
+            <DragCardPreview appt={activeAppt} snapTimeStr={dragIndicator?.timeStr} />
+          ) : null}
         </DragOverlay>
       </DndContext>
 
@@ -453,6 +587,21 @@ export function AppointmentsWeekView({
           initialDate={initialDate}
           initialTime={initialTime}
           onClose={() => setModalOpen(false)}
+        />
+      )}
+
+      {/* 編集モーダル */}
+      {editMode && (
+        <NewAppointmentDialog
+          tenantId={tenantId}
+          tenantSlug={slug}
+          staffList={staffList}
+          businessHours={businessHours}
+          lunchStartTime={lunchStartTime}
+          lunchEndTime={lunchEndTime}
+          slotInterval={slotInterval}
+          editMode={editMode}
+          onClose={() => setEditMode(null)}
         />
       )}
 

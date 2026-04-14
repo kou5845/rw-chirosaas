@@ -1,31 +1,59 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * カルテ新規登録 / 編集フォーム（クライアントコンポーネント）
+ *
+ * mode="create" (default): createKarte アクションを使用
+ * mode="edit":             updateKarte アクションを使用
+ *   - initialValues で既存データを初期値としてセット
+ *   - existingMedia で既存メディアを表示・削除マーク可能
+ *   - onSuccess コールバックで閉じる処理を呼び出す
+ */
+
+import { useState, useCallback, useEffect } from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ChevronDown, AlertCircle, Save } from "lucide-react";
+import { AlertCircle, Save, FileText, Dumbbell, X, ImageIcon, Video } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { createKarte } from "@/app/[tenantId]/patients/[patientId]/kartes/actions";
+import { createKarte, updateKarte } from "@/app/[tenantId]/patients/[patientId]/kartes/actions";
 import {
   BODY_PARTS,
   TREATMENTS,
   CONDITION_STATUS_OPTIONS,
 } from "@/lib/karte-constants";
 import type { KarteMode } from "@prisma/client";
+import {
+  MediaUploadSection,
+  type UploadedMedia,
+} from "./MediaUploadSection";
+import {
+  TrainingRecordSection,
+  type ExerciseMaster,
+  type PreviousRecord,
+  type ExerciseRow,
+} from "./TrainingRecordSection";
 
-// ── 型定義 ────────────────────────────────────────────────────────
-type ExerciseMaster = { id: string; name: string; category: string | null };
+// ─────────────────────────────────────────────────────────────────────────────
+// 型定義
+// ─────────────────────────────────────────────────────────────────────────────
 
-type ExerciseRow = {
-  rowId:       string;
-  exerciseId:  string;
-  sets:        string;
-  reps:        string;
-  weightKg:    string;
-  durationSec: string;
-  memo:        string;
+export type ExistingMediaItem = {
+  id:          string;
+  signedUrl:   string;
+  mediaType:   "image" | "video";
+  fileSizeKb:  number | null;
+};
+
+export type KarteInitialValues = {
+  karteType:       "MEDICAL" | "TRAINING";
+  conditionNote:   string | null;
+  progressNote:    string | null;
+  conditionStatus: string;
+  bodyParts:       string[];
+  treatments:      string[];
+  exerciseRows:    ExerciseRow[];
 };
 
 export type KarteNewFormProps = {
@@ -37,10 +65,20 @@ export type KarteNewFormProps = {
   isProfessional:    boolean;
   trainingEnabled:   boolean;
   exercises:         ExerciseMaster[];
+  previousRecords:   PreviousRecord[];
+  // edit mode
+  mode?:             "create" | "edit";
+  karteId?:          string;
+  initialValues?:    KarteInitialValues;
+  existingMedia?:    ExistingMediaItem[];
+  onSuccess?:        () => void;
 };
 
-// ── 送信ボタン（useFormStatus で pending 状態を取得）─────────────
-function SubmitButton() {
+// ─────────────────────────────────────────────────────────────────────────────
+// Submit ボタン
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -59,23 +97,21 @@ function SubmitButton() {
           保存中...
         </>
       ) : (
-        <>
-          <Save size={16} />
-          カルテを保存
-        </>
+        <><Save size={16} />{label}</>
       )}
     </button>
   );
 }
 
-// ── セクションカード ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// セクションカード
+// ─────────────────────────────────────────────────────────────────────────────
+
 function SectionCard({
-  title,
-  badge,
-  children,
+  title, badge, children,
 }: {
-  title: string;
-  badge?: React.ReactNode;
+  title:    string;
+  badge?:   React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -89,7 +125,114 @@ function SectionCard({
   );
 }
 
-// ── メインフォームコンポーネント ─────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// 既存メディアグリッド（編集時の既存ファイル表示 + 削除マーク）
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ExistingMediaGrid({
+  media,
+  deletedIds,
+  onToggleDelete,
+}: {
+  media:          ExistingMediaItem[];
+  deletedIds:     Set<string>;
+  onToggleDelete: (id: string) => void;
+}) {
+  if (media.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        既存のファイル（{media.length}件）
+      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {media.map((m) => {
+          const isDeleted = deletedIds.has(m.id);
+          return (
+            <div
+              key={m.id}
+              className={cn(
+                "group relative overflow-hidden rounded-xl border bg-white shadow-sm transition-all",
+                isDeleted ? "border-red-200 opacity-50" : "border-gray-100"
+              )}
+            >
+              {/* メディアプレビュー */}
+              <div className="relative aspect-video overflow-hidden bg-gray-100">
+                {m.mediaType === "video" ? (
+                  <video
+                    src={m.signedUrl}
+                    playsInline
+                    muted
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.signedUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                )}
+                {/* 削除マークオーバーレイ */}
+                {isDeleted && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-red-500/30">
+                    <X size={24} className="text-red-600" />
+                  </div>
+                )}
+                {/* 削除トグルボタン */}
+                <button
+                  type="button"
+                  onClick={() => onToggleDelete(m.id)}
+                  aria-label={isDeleted ? "削除を取り消す" : "削除する"}
+                  className={cn(
+                    "absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-white transition-all",
+                    isDeleted
+                      ? "bg-red-500 opacity-100"
+                      : "bg-black/60 opacity-0 hover:bg-red-500 group-hover:opacity-100"
+                  )}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              {/* ファイル情報 */}
+              <div className="flex items-center gap-1.5 px-2.5 py-2">
+                {m.mediaType === "video"
+                  ? <Video size={11} className="shrink-0 text-gray-400" />
+                  : <ImageIcon size={11} className="shrink-0 text-gray-400" />
+                }
+                <p className="truncate text-xs text-gray-500">
+                  {m.mediaType === "video" ? "動画" : "画像"}
+                  {m.fileSizeKb && (
+                    <span className="ml-1 text-gray-400">
+                      {m.fileSizeKb < 1024
+                        ? `${m.fileSizeKb}KB`
+                        : `${(m.fileSizeKb / 1024).toFixed(1)}MB`}
+                    </span>
+                  )}
+                </p>
+                {isDeleted && (
+                  <span className="ml-auto shrink-0 rounded text-[10px] font-semibold text-red-500">
+                    削除
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {deletedIds.size > 0 && (
+        <p className="text-xs text-red-500">
+          {deletedIds.size}件のファイルが保存時に削除されます
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// メインコンポーネント
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function KarteNewForm({
   tenantId,
   tenantSlug,
@@ -99,17 +242,69 @@ export function KarteNewForm({
   isProfessional,
   trainingEnabled,
   exercises,
+  previousRecords,
+  mode = "create",
+  karteId,
+  initialValues,
+  existingMedia = [],
+  onSuccess,
 }: KarteNewFormProps) {
   const router = useRouter();
-  const [state, formAction] = useActionState(createKarte, null);
 
-  // ── クライアント状態 ───────────────────────────────────────────
-  const [conditionStatus, setConditionStatus]       = useState<string>("");
-  const [selectedBodyParts, setSelectedBodyParts]   = useState<Set<string>>(new Set());
-  const [selectedTreatments, setSelectedTreatments] = useState<Set<string>>(new Set());
-  const [exerciseRows, setExerciseRows]             = useState<ExerciseRow[]>([]);
+  // mode に応じてアクションを切り替え
+  // createKarte は redirect() で終了するため success を返さないが、
+  // useActionState に渡す型を統一するため共通型にキャストする
+  type UnifiedState = { error?: string; success?: boolean } | null;
+  type UnifiedAction = (state: UnifiedState, formData: FormData) => Promise<UnifiedState>;
+  const action = (mode === "edit" ? updateKarte : createKarte) as UnifiedAction;
+  const [state, formAction] = useActionState(action, null);
 
-  // ── トグル関数 ─────────────────────────────────────────────────
+  // 編集成功時: onSuccess コールバックを呼ぶ
+  useEffect(() => {
+    if (mode === "edit" && state && "success" in state && state.success) {
+      onSuccess?.();
+    }
+  }, [mode, state, onSuccess]);
+
+  // ── カルテ種別 ────────────────────────────────────────────────
+  type KarteTypeUI = "MEDICAL" | "TRAINING";
+  const [karteType, setKarteType] = useState<KarteTypeUI>(
+    initialValues?.karteType ?? "MEDICAL"
+  );
+
+  // ── Professional モード状態 ────────────────────────────────────
+  const [conditionStatus, setConditionStatus] = useState<string>(
+    initialValues?.conditionStatus ?? ""
+  );
+  const [selectedBodyParts, setSelectedBodyParts] = useState<Set<string>>(
+    new Set(initialValues?.bodyParts ?? [])
+  );
+  const [selectedTreatments, setSelectedTreatments] = useState<Set<string>>(
+    new Set(initialValues?.treatments ?? [])
+  );
+
+  // ── トレーニング記録行 ─────────────────────────────────────────
+  const [exerciseRows, setExerciseRows] = useState<ExerciseRow[]>(
+    initialValues?.exerciseRows ?? []
+  );
+
+  // ── 新規メディア ──────────────────────────────────────────────
+  const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
+  const handleMediaChange = useCallback((media: UploadedMedia[]) => {
+    setUploadedMedia(media);
+  }, []);
+
+  // ── 既存メディアの削除マーク ─────────────────────────────────
+  const [deletedMediaIds, setDeletedMediaIds] = useState<Set<string>>(new Set());
+
+  function toggleDeleteMedia(id: string) {
+    setDeletedMediaIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
   function toggleBodyPart(part: string) {
     setSelectedBodyParts((prev) => {
       const next = new Set(prev);
@@ -126,37 +321,7 @@ export function KarteNewForm({
     });
   }
 
-  // ── トレーニング行操作 ─────────────────────────────────────────
-  function addExerciseRow() {
-    setExerciseRows((prev) => [
-      ...prev,
-      {
-        rowId:       crypto.randomUUID(),
-        exerciseId:  exercises[0]?.id ?? "",
-        sets:        "3",
-        reps:        "10",
-        weightKg:    "",
-        durationSec: "",
-        memo:        "",
-      },
-    ]);
-  }
-
-  function removeExerciseRow(rowId: string) {
-    setExerciseRows((prev) => prev.filter((r) => r.rowId !== rowId));
-  }
-
-  function updateExerciseRow(
-    rowId: string,
-    field: keyof Omit<ExerciseRow, "rowId">,
-    value: string
-  ) {
-    setExerciseRows((prev) =>
-      prev.map((r) => (r.rowId === rowId ? { ...r, [field]: value } : r))
-    );
-  }
-
-  // 送信前に exerciseRows を JSON にシリアライズ
+  // ── シリアライズ ───────────────────────────────────────────────
   const exerciseRecordsJson = JSON.stringify(
     exerciseRows.map((r) => ({
       exerciseId:  r.exerciseId,
@@ -168,16 +333,34 @@ export function KarteNewForm({
     }))
   );
 
+  const mediaJson = JSON.stringify(
+    uploadedMedia.map((m) => ({
+      storagePath: m.storagePath,
+      mediaType:   m.mediaType,
+      fileSizeKb:  m.fileSizeKb,
+    }))
+  );
+
+  const deleteMediaIdsJson = JSON.stringify(Array.from(deletedMediaIds));
+
+  const errorMsg = state && "error" in state ? state.error : null;
+  const submitLabel = mode === "edit" ? "変更を保存" : "カルテを保存";
+
   return (
     <form action={formAction} className="space-y-5">
-      {/* ── 隠しフィールド群 ── */}
+      {/* ── hidden fields ── */}
       <input type="hidden" name="tenantId"            value={tenantId} />
       <input type="hidden" name="patientId"           value={patientId} />
       <input type="hidden" name="tenantSlug"          value={tenantSlug} />
       <input type="hidden" name="karteModeSnapshot"   value={karteModeSnapshot} />
+      <input type="hidden" name="karteType"           value={karteType} />
       <input type="hidden" name="conditionStatus"     value={conditionStatus} />
       <input type="hidden" name="exerciseRecordsJson" value={exerciseRecordsJson} />
-      {/* 選択中の部位・施術内容を hidden input として送信 */}
+      <input type="hidden" name="mediaJson"           value={mediaJson} />
+      <input type="hidden" name="deleteMediaIdsJson"  value={deleteMediaIdsJson} />
+      {mode === "edit" && karteId && (
+        <input type="hidden" name="karteId" value={karteId} />
+      )}
       {Array.from(selectedBodyParts).map((part) => (
         <input key={part} type="hidden" name="bodyParts" value={part} />
       ))}
@@ -186,271 +369,269 @@ export function KarteNewForm({
       ))}
 
       {/* ── エラーバナー ── */}
-      {state?.error && (
+      {errorMsg && (
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
-          {state.error}
+          {errorMsg}
         </div>
       )}
 
-      {/* ══ 1. 症状・主訴（全モード共通）══ */}
-      <SectionCard title="症状・主訴">
-        <Textarea
-          name="conditionNote"
-          placeholder={`${patientName} さんの本日の症状・訴えを記入してください`}
-          rows={4}
-          className="resize-none rounded-xl border-gray-200 text-sm focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
-        />
-      </SectionCard>
-
-      {/* ══ Professional モード専用セクション ══ */}
-      {isProfessional && (
-        <>
-          {/* 2. 状態評価 */}
-          <SectionCard
-            title="状態評価"
-            badge={
-              <span className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-bg)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--brand-dark)]">
-                Professional
-              </span>
-            }
-          >
-            <div className="flex flex-wrap gap-3">
-              {CONDITION_STATUS_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() =>
-                    setConditionStatus((prev) =>
-                      prev === opt.value ? "" : opt.value
-                    )
-                  }
-                  className={cn(
-                    "flex h-11 min-w-[104px] items-center justify-center gap-2 rounded-xl border text-sm font-semibold transition-all active:scale-95",
-                    conditionStatus === opt.value ? opt.active : opt.inactive
-                  )}
-                >
-                  <span className="text-base leading-none">{opt.emoji}</span>
-                  {opt.label}
-                </button>
-              ))}
-              {conditionStatus && (
-                <button
-                  type="button"
-                  onClick={() => setConditionStatus("")}
-                  className="self-center text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline"
-                >
-                  選択解除
-                </button>
+      {/* ── カルテ種別タブ（Professional + training_record ON のみ）── */}
+      {isProfessional && trainingEnabled && mode === "create" && (
+        <div className="flex gap-1 rounded-xl border border-gray-100 bg-gray-50 p-1">
+          {([
+            { key: "MEDICAL"  as KarteTypeUI, label: "施術カルテ",         icon: FileText },
+            { key: "TRAINING" as KarteTypeUI, label: "トレーニングカルテ", icon: Dumbbell },
+          ] as { key: KarteTypeUI; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setKarteType(key)}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all",
+                karteType === key
+                  ? "bg-white text-[var(--brand-dark)] shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
               )}
-            </div>
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ══ 施術カルテ コンテンツ ══ */}
+      {karteType === "MEDICAL" && (
+        <>
+          {/* 1. 症状・主訴 */}
+          <SectionCard title="症状・主訴">
+            <Textarea
+              name="conditionNote"
+              placeholder={`${patientName} さんの本日の症状・訴えを記入してください`}
+              rows={4}
+              defaultValue={initialValues?.conditionNote ?? ""}
+              className="resize-none rounded-xl border-gray-200 text-sm focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
+            />
           </SectionCard>
 
-          {/* 3. 施術部位（複数選択）*/}
-          <SectionCard
-            title={
-              selectedBodyParts.size > 0
-                ? `施術部位（${selectedBodyParts.size}箇所選択中）`
-                : "施術部位"
-            }
-          >
-            <div className="flex flex-wrap gap-2">
-              {BODY_PARTS.map((part) => {
-                const active = selectedBodyParts.has(part);
-                return (
-                  <button
-                    key={part}
-                    type="button"
-                    onClick={() => toggleBodyPart(part)}
-                    className={cn(
-                      "rounded-lg border px-3 py-1.5 text-sm font-medium transition-all active:scale-95",
-                      active
-                        ? "border-[var(--brand)] bg-[var(--brand-bg)] text-[var(--brand-dark)] shadow-sm"
-                        : "border-gray-200 text-gray-600 hover:border-[var(--brand-border)] hover:bg-[var(--brand-hover)]"
-                    )}
-                  >
-                    {part}
-                  </button>
-                );
-              })}
-            </div>
+          {/* Professional モード専用 */}
+          {isProfessional && (
+            <>
+              {/* 2. 状態評価 */}
+              <SectionCard title="状態評価" badge={<ProfBadge />}>
+                <div className="flex flex-wrap gap-3">
+                  {CONDITION_STATUS_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setConditionStatus((prev) => prev === opt.value ? "" : opt.value)}
+                      className={cn(
+                        "flex h-11 min-w-[104px] items-center justify-center gap-2 rounded-xl border text-sm font-semibold transition-all active:scale-95",
+                        conditionStatus === opt.value ? opt.active : opt.inactive
+                      )}
+                    >
+                      <span className="text-base leading-none">{opt.emoji}</span>
+                      {opt.label}
+                    </button>
+                  ))}
+                  {conditionStatus && (
+                    <button type="button" onClick={() => setConditionStatus("")}
+                      className="self-center text-xs text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline">
+                      選択解除
+                    </button>
+                  )}
+                </div>
+              </SectionCard>
+
+              {/* 3. 施術部位 */}
+              <SectionCard
+                title={selectedBodyParts.size > 0
+                  ? `施術部位（${selectedBodyParts.size}箇所選択中）`
+                  : "施術部位"}
+              >
+                <div className="flex flex-wrap gap-2">
+                  {BODY_PARTS.map((part) => {
+                    const active = selectedBodyParts.has(part);
+                    return (
+                      <button key={part} type="button" onClick={() => toggleBodyPart(part)}
+                        className={cn(
+                          "rounded-lg border px-3 py-1.5 text-sm font-medium transition-all active:scale-95",
+                          active
+                            ? "border-[var(--brand)] bg-[var(--brand-bg)] text-[var(--brand-dark)] shadow-sm"
+                            : "border-gray-200 text-gray-600 hover:border-[var(--brand-border)] hover:bg-[var(--brand-hover)]"
+                        )}>
+                        {part}
+                      </button>
+                    );
+                  })}
+                </div>
+              </SectionCard>
+
+              {/* 4. 施術内容 */}
+              <SectionCard
+                title={selectedTreatments.size > 0
+                  ? `施術内容（${selectedTreatments.size}項目選択中）`
+                  : "施術内容"}
+              >
+                <div className="flex flex-wrap gap-2">
+                  {TREATMENTS.map((t) => {
+                    const active = selectedTreatments.has(t);
+                    return (
+                      <button key={t} type="button" onClick={() => toggleTreatment(t)}
+                        className={cn(
+                          "rounded-lg border px-3 py-1.5 text-sm font-medium transition-all active:scale-95",
+                          active
+                            ? "border-indigo-400 bg-indigo-50 text-indigo-700 shadow-sm"
+                            : "border-gray-200 text-gray-600 hover:border-indigo-200 hover:bg-indigo-50/60"
+                        )}>
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+              </SectionCard>
+            </>
+          )}
+
+          {/* 5. 経過・所見 */}
+          <SectionCard title="経過・所見">
+            <Textarea
+              name="progressNote"
+              placeholder="施術後の変化、次回への申し送りなどを記入してください"
+              rows={4}
+              defaultValue={initialValues?.progressNote ?? ""}
+              className="resize-none rounded-xl border-gray-200 text-sm focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
+            />
           </SectionCard>
 
-          {/* 4. 施術内容（複数選択）*/}
-          <SectionCard
-            title={
-              selectedTreatments.size > 0
-                ? `施術内容（${selectedTreatments.size}項目選択中）`
-                : "施術内容"
-            }
-          >
-            <div className="flex flex-wrap gap-2">
-              {TREATMENTS.map((t) => {
-                const active = selectedTreatments.has(t);
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => toggleTreatment(t)}
-                    className={cn(
-                      "rounded-lg border px-3 py-1.5 text-sm font-medium transition-all active:scale-95",
-                      active
-                        ? "border-indigo-400 bg-indigo-50 text-indigo-700 shadow-sm"
-                        : "border-gray-200 text-gray-600 hover:border-indigo-200 hover:bg-indigo-50/60"
-                    )}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-          </SectionCard>
+          {/* 6. メディア（Professional のみ）*/}
+          {isProfessional && (
+            <SectionCard
+              title={
+                existingMedia.length + uploadedMedia.length > 0
+                  ? `写真・動画（${existingMedia.length + uploadedMedia.length}件）`
+                  : "写真・動画"
+              }
+              badge={<ProfBadge />}
+            >
+              <div className="space-y-4">
+                {/* 既存メディア（編集時） */}
+                {existingMedia.length > 0 && (
+                  <ExistingMediaGrid
+                    media={existingMedia}
+                    deletedIds={deletedMediaIds}
+                    onToggleDelete={toggleDeleteMedia}
+                  />
+                )}
+                {/* 新規アップロード */}
+                <div>
+                  {existingMedia.length > 0 && (
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      新しいファイルを追加
+                    </p>
+                  )}
+                  <MediaUploadSection
+                    tenantId={tenantId}
+                    onChange={handleMediaChange}
+                  />
+                </div>
+              </div>
+            </SectionCard>
+          )}
         </>
       )}
 
-      {/* ══ 5. 経過・所見（全モード共通）══ */}
-      <SectionCard title="経過・所見">
-        <Textarea
-          name="progressNote"
-          placeholder="施術後の変化、次回への申し送りなどを記入してください"
-          rows={4}
-          className="resize-none rounded-xl border-gray-200 text-sm focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
-        />
-      </SectionCard>
-
-      {/* ══ 6. トレーニング記録（A院 + training_record ON のみ）══ */}
-      {isProfessional && trainingEnabled && (
-        <SectionCard
-          title={
-            exerciseRows.length > 0
+      {/* ══ トレーニングカルテ コンテンツ ══ */}
+      {karteType === "TRAINING" && (
+        <>
+          {/* トレーニング記録 */}
+          <SectionCard
+            title={exerciseRows.length > 0
               ? `トレーニング記録（${exerciseRows.length}種目）`
-              : "トレーニング記録"
-          }
-          badge={
-            <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700">
-              A院専用
-            </span>
-          }
-        >
-          <div className="space-y-3">
-            {exerciseRows.length > 0 && (
-              <>
-                {/* カラムヘッダー */}
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_2fr_auto] gap-2 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                  <span>種目</span>
-                  <span className="text-center">セット</span>
-                  <span className="text-center">レップ</span>
-                  <span className="text-center">重量(kg)</span>
-                  <span>メモ</span>
-                  <span />
+              : "トレーニング記録"}
+            badge={
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700">
+                <Dumbbell size={10} className="mr-1 inline" />
+                トレーニング
+              </span>
+            }
+          >
+            <TrainingRecordSection
+              exercises={exercises}
+              previousRecords={previousRecords}
+              rows={exerciseRows}
+              onRowsChange={setExerciseRows}
+            />
+          </SectionCard>
+
+          {/* メモ */}
+          <SectionCard title="トレーニングメモ">
+            <Textarea
+              name="progressNote"
+              placeholder="本日のコンディション、フォーム確認事項、次回の目標など"
+              rows={3}
+              defaultValue={initialValues?.progressNote ?? ""}
+              className="resize-none rounded-xl border-gray-200 text-sm focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
+            />
+          </SectionCard>
+
+          {/* メディアアップロード（Professional のみ）*/}
+          {isProfessional && (
+            <SectionCard
+              title={
+                existingMedia.length + uploadedMedia.length > 0
+                  ? `フォーム動画・写真（${existingMedia.length + uploadedMedia.length}件）`
+                  : "フォーム動画・写真"
+              }
+              badge={<ProfBadge />}
+            >
+              <div className="space-y-4">
+                {existingMedia.length > 0 && (
+                  <ExistingMediaGrid
+                    media={existingMedia}
+                    deletedIds={deletedMediaIds}
+                    onToggleDelete={toggleDeleteMedia}
+                  />
+                )}
+                <div>
+                  {existingMedia.length > 0 && (
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      新しいファイルを追加
+                    </p>
+                  )}
+                  <MediaUploadSection
+                    tenantId={tenantId}
+                    onChange={handleMediaChange}
+                  />
                 </div>
-
-                {exerciseRows.map((row, index) => (
-                  <div
-                    key={row.rowId}
-                    className="grid grid-cols-[2fr_1fr_1fr_1fr_2fr_auto] items-center gap-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3"
-                  >
-                    {/* 種目セレクト */}
-                    <div className="relative">
-                      <select
-                        value={row.exerciseId}
-                        onChange={(e) =>
-                          updateExerciseRow(row.rowId, "exerciseId", e.target.value)
-                        }
-                        className="h-9 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-8 text-sm text-gray-700 outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]/20"
-                      >
-                        {exercises.map((ex) => (
-                          <option key={ex.id} value={ex.id}>
-                            {ex.name}
-                            {ex.category ? ` (${ex.category})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        size={13}
-                        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
-                      />
-                    </div>
-
-                    {/* セット数 */}
-                    <input
-                      type="number" min="1" max="99"
-                      placeholder="3"
-                      value={row.sets}
-                      onChange={(e) => updateExerciseRow(row.rowId, "sets", e.target.value)}
-                      className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-center text-sm outline-none focus:border-[var(--brand)]"
-                    />
-
-                    {/* レップ数 */}
-                    <input
-                      type="number" min="1" max="999"
-                      placeholder="10"
-                      value={row.reps}
-                      onChange={(e) => updateExerciseRow(row.rowId, "reps", e.target.value)}
-                      className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-center text-sm outline-none focus:border-[var(--brand)]"
-                    />
-
-                    {/* 重量 */}
-                    <input
-                      type="number" min="0" step="0.5"
-                      placeholder="0"
-                      value={row.weightKg}
-                      onChange={(e) => updateExerciseRow(row.rowId, "weightKg", e.target.value)}
-                      className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-center text-sm outline-none focus:border-[var(--brand)]"
-                    />
-
-                    {/* メモ */}
-                    <input
-                      type="text"
-                      placeholder="フォーム注意点など"
-                      value={row.memo}
-                      onChange={(e) => updateExerciseRow(row.rowId, "memo", e.target.value)}
-                      className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-[var(--brand)]"
-                    />
-
-                    {/* 削除 */}
-                    <button
-                      type="button"
-                      onClick={() => removeExerciseRow(row.rowId)}
-                      aria-label={`${index + 1}行目を削除`}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                ))}
-              </>
-            )}
-
-            {exercises.length > 0 ? (
-              <button
-                type="button"
-                onClick={addExerciseRow}
-                className="flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--brand-border)] text-sm font-medium text-[var(--brand-dark)] transition-colors hover:bg-[var(--brand-bg)]"
-              >
-                <Plus size={15} />
-                種目を追加
-              </button>
-            ) : (
-              <p className="text-center text-xs text-gray-400">
-                トレーニング種目マスタが未登録です
-              </p>
-            )}
-          </div>
-        </SectionCard>
+              </div>
+            </SectionCard>
+          )}
+        </>
       )}
 
       {/* ══ フッター ══ */}
       <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => mode === "edit" ? onSuccess?.() : router.back()}
           className="rounded-xl px-4 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100"
         >
           キャンセル
         </button>
-        <SubmitButton />
+        <SubmitButton label={submitLabel} />
       </div>
     </form>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ProfBadge() {
+  return (
+    <span className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-bg)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--brand-dark)]">
+      Professional
+    </span>
   );
 }

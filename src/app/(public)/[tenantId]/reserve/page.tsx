@@ -1,0 +1,111 @@
+/**
+ * 患者向け公開予約フォームページ
+ *
+ * - 認証不要（proxy.ts でパブリックパスとして許可済み）
+ * - テナント情報・営業時間を Server Component で取得し、ReserveForm に渡す
+ * - URL: /{tenantSlug}/reserve
+ */
+
+import { notFound } from "next/navigation";
+import { CalendarDays } from "lucide-react";
+import { prisma } from "@/lib/prisma";
+import { ReserveForm, type BusinessHourSummary } from "./ReserveForm";
+
+type Props = {
+  params: Promise<{ tenantId: string }>;
+};
+
+export async function generateMetadata({ params }: Props) {
+  const { tenantId: slug } = await params;
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: slug },
+    select: { name: true },
+  });
+  return {
+    title: tenant ? `${tenant.name} — 予約フォーム` : "予約フォーム",
+  };
+}
+
+export default async function ReservePage({ params }: Props) {
+  const { tenantId: slug } = await params;
+
+  // CLAUDE.md: tenantId は DB 照合で確定
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: slug },
+    select: { id: true, name: true, isActive: true, phone: true, address: true, lineEnabled: true, lineFriendUrl: true },
+  });
+
+  if (!tenant || !tenant.isActive) notFound();
+
+  // 曜日別営業フラグのみ取得（実際のスロット可否は Client からの Server Action で判定）
+  const rawHours = await prisma.businessHour.findMany({
+    where:   { tenantId: tenant.id },
+    select:  { dayOfWeek: true, isOpen: true },
+    orderBy: { dayOfWeek: "asc" },
+  });
+
+  const businessHours: BusinessHourSummary[] = rawHours;
+
+  return (
+    <div className="min-h-screen bg-[#F0FAFB]">
+
+      {/* ── ヘッダー ── */}
+      <header className="border-b border-[var(--brand-border)] bg-white backdrop-blur-sm supports-[backdrop-filter]:bg-white/90">
+        <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-medium)]">
+            <CalendarDays size={18} className="text-white" />
+          </div>
+          <div>
+            <p className="text-base font-bold text-gray-800">{tenant.name}</p>
+            <p className="text-xs text-gray-400">オンライン予約フォーム</p>
+          </div>
+        </div>
+      </header>
+
+      {/* ── メインコンテンツ ── */}
+      <main className="mx-auto max-w-lg px-4 py-6">
+
+        {/* 説明バナー */}
+        <div className="mb-5 rounded-2xl border border-[var(--brand-border)] bg-white px-4 py-4 sm:px-5">
+          <p className="text-sm font-semibold text-gray-700">ご予約の流れ</p>
+          <ol className="mt-2 space-y-1 text-xs text-gray-500 list-none">
+            <li className="flex items-center gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">1</span>
+              ご希望の日付・時間を選択してください
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">2</span>
+              お名前と電話番号を入力して申し込みください
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">3</span>
+              スタッフ確認後、LINE または電話でご連絡します
+            </li>
+          </ol>
+        </div>
+
+        {/* フォームカード */}
+        <div className="rounded-2xl border border-gray-100 bg-white px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+          <ReserveForm
+            tenantSlug={slug}
+            businessHours={businessHours}
+            phone={tenant.phone}
+            address={tenant.address}
+            lineEnabled={tenant.lineEnabled}
+            lineFriendUrl={tenant.lineFriendUrl}
+          />
+        </div>
+
+        {tenant.phone ? (
+          <p className="mt-5 text-center text-xs text-gray-400">
+            お電話でのご予約・変更・キャンセルは <span className="font-semibold text-gray-600">{tenant.phone}</span> までご連絡ください。
+          </p>
+        ) : (
+          <p className="mt-5 text-center text-xs text-gray-400">
+            お電話での予約も受け付けております。お気軽にご連絡ください。
+          </p>
+        )}
+      </main>
+    </div>
+  );
+}

@@ -45,29 +45,117 @@ npx prisma studio         # DB 閲覧 GUI の起動
 
 ---
 
-## ディレクトリ構成の指針
+## ディレクトリ構成（実装済み・2026-04-07時点）
 
 ```
 src/
   app/
-    [tenant_id]/              # テナントごとのルーティングベース
-      (admin)/                # 管理者向けページ群
-      (patient)/              # 患者向けページ群
-  components/                 # UIコンポーネント（ビジネスロジックを含まない純粋なUI）
-  features/                   # 機能ドメインごとのビジネスロジック
+    [tenantId]/                         # テナントごとのルーティングベース（slug = subdomain）
+      layout.tsx                        # ダッシュボードレイアウト（サイドバー + ヘッダー）
+      dashboard/page.tsx                # ダッシュボード（KPIカード・直近予約）
+      appointments/
+        page.tsx                        # 週間カレンダー / リストビュー 切替
+        actions.ts                      # confirmAppointment Server Action
+        reschedule-action.ts            # DnDドロップ時の日時変更 Server Action（maxCapacity検証付き）
+      patients/
+        page.tsx                        # 患者一覧（検索）
+        new/                            # 患者新規作成フォーム
+        [patientId]/
+          page.tsx                      # 患者詳細 + カルテ履歴
+          AppointmentSection.tsx        # 予約履歴 + 新規予約ダイアログ
+          NewAppointmentDialog.tsx      # 患者詳細から起動する予約作成ダイアログ（再エクスポート）
+          appointments/actions.ts       # createAppointment Server Action（maxCapacity検証付き）
+          kartes/
+            new/page.tsx                # カルテ新規作成
+            actions.ts                  # createKarte Server Action
+      kartes/page.tsx                   # カルテ一覧
+      settings/
+        page.tsx                        # 設定ページ（営業時間 + スロット設定）
+        SettingsForm.tsx                # 設定フォーム（slotInterval/maxCapacity UI含む）
+        actions.ts                      # updateTenantSettings Server Action
+    api/
+      cron/notifications/route.ts       # LINE通知バッチ（Vercel Cron: 毎分実行）
+      test-line/route.ts               # LINE疎通テスト用エンドポイント
+  components/
+    layout/
+      Sidebar.tsx                       # フィーチャートグルで表示制御するナビ
+      Header.tsx                        # パンくず + 承認待ちバッジ
     appointments/
+      AppointmentsWeekView.tsx          # DndContext + WeeklyCalendar + NewAppointmentDialog 統合
+      WeeklyCalendar.tsx                # 週間グリッドカレンダー（DnD対応・slotInterval動的グリッド）
+      NewAppointmentDialog.tsx          # 新規予約モーダル（slotIntervalで時間選択肢を動的生成）
+      AppointmentConfirmForm.tsx        # 承認フォーム（pending→confirmed）
+    patients/
+      PatientSearchBar.tsx              # 患者検索インプット
     karte/
-    tenants/
-    ...
+      KarteNewForm.tsx                  # カルテ入力フォーム（simple/professional切替）
+    ui/
+      badge.tsx / button.tsx / textarea.tsx  # shadcn/ui コンポーネント
   lib/
-    supabase/                 # Supabase クライアント・サーバー初期化
-    prisma/                   # Prisma クライアント
-    features/                 # TenantFeatureService など
-  middleware.ts               # テナント認証・tenant_id 照合（必須）
-  types/                      # 型定義
+    prisma.ts                           # Prismaシングルトン（pgBouncer対応）
+    line.ts                             # LINE Messaging APIクライアント + テンプレート
+    format.ts                           # 日付・文字列フォーマットユーティリティ
+    karte-constants.ts                  # 部位・施術内容・状態評価の定数
+    utils.ts                            # cn() classname ユーティリティ
 ```
 
-**原則**: ビジネスロジックは `features/` に置き、`components/` には UI のみ。
+**原則**: ビジネスロジックは Server Action / Server Component に置き、`components/` には UI のみ。
+
+---
+
+## 実装状態サマリー（2026-04-07時点）
+
+### ✅ 実装済み（MVP Phase 1）
+
+| 機能 | 状態 | 備考 |
+|---|---|---|
+| テナント管理（Tenant テーブル） | 完了 | slotInterval / maxCapacity フィールド追加済み |
+| 営業時間設定 | 完了 | BusinessHour テーブル + SettingsForm UI |
+| 予約スロット可変設定 | **完了** | SettingsForm に slotInterval(15/20/30/60分) + maxCapacity UI 追加 |
+| 同時予約上限バリデーション | **完了** | createAppointment + rescheduleAppointment の両アクションで検証 |
+| 患者管理 | 完了 | 一覧・検索・新規作成・詳細ページ |
+| 予約管理（週間カレンダー） | 完了 | slotInterval 動的グリッド・スナップ対応 |
+| 予約管理（リストビュー） | 完了 | 承認待ち/確定済み/過去 タブ |
+| 予約承認フロー | 完了 | pending → confirmed + AppointmentLog 記録 |
+| ドラッグ&ドロップ日時変更 | 完了 | @dnd-kit + slotInterval スナップ + maxCapacity 検証 |
+| カルテ（simple モード） | 完了 | 症状メモ + 経過メモ |
+| カルテ（professional モード） | 完了 | 部位選択 + 施術内容 + 状態評価 + トレーニング記録 |
+| LINE 通知 | 完了 | 確定/リマインダー/キャンセル テンプレート + NotificationQueue |
+| LINE 通知バッチ | 完了 | /api/cron/notifications (Vercel Cron) |
+| フィーチャートグル | 完了 | TenantSetting テーブル + サイドバー表示制御 |
+| ダッシュボード | 完了 | KPIカード + 直近予約 |
+
+### ⚠️ 未実装（Phase 2以降）
+
+- Supabase Auth 実連携（現在は DB の Profile.id を直接参照）
+- Middleware によるテナント認証・tenant_id 照合（`src/middleware.ts` 未実装）
+- カルテメディアアップロード（Supabase Storage + 署名付きURL）
+- 患者向け Web 予約フォーム / LINE 予約フロー
+- Square 決済連携・保険請求・回数券
+- スタッフ権限マトリクス（現在は admin/staff の二値のみ）
+
+### Tenant モデルの重要フィールド（スキーマ確定済み）
+
+```
+slotInterval    Int  @default(30)  // 予約グリッド刻み: 15 | 20 | 30 | 60
+maxCapacity     Int  @default(1)   // 同一時間帯の最大同時予約数（上限: 10）
+```
+
+### maxCapacity 重複判定ロジック
+
+```typescript
+// 新規予約作成 / DnDリスケジュール 共通ロジック
+const overlapping = await prisma.appointment.count({
+  where: {
+    tenantId,
+    id:     { not: appointmentId }, // リスケ時は自分を除外
+    status: { in: ["pending", "confirmed"] },
+    startAt: { lt: newEndAt },      // 重複判定: start_new < end_existing
+    endAt:   { gt: newStartAt },   //            end_new   > start_existing
+  },
+});
+if (overlapping >= maxCapacity) return error;
+```
 
 ---
 

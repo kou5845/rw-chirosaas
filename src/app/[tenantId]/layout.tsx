@@ -7,10 +7,12 @@
  *   - テナントが存在しない場合は notFound() を返す
  */
 
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { Toaster } from "sonner";
 
 type Props = {
   children: React.ReactNode;
@@ -19,17 +21,25 @@ type Props = {
 
 export default async function DashboardLayout({ children, params }: Props) {
   const { tenantId: slug } = await params;
+  const session = await auth();
 
   // テナントをサブドメイン（URL スラッグ）で検索
   const tenant = await prisma.tenant.findUnique({
     where: { subdomain: slug },
     select: {
-      id:   true,
-      name: true,
+      id:       true,
+      name:     true,
+      isActive: true,
     },
   });
 
   if (!tenant) notFound();
+
+  // テナントが無効化されている場合は即時ブロック（セッション中の即時反映）
+  // proxy.ts は JWT のみ検証しDB呼び出しが行えないため、このレイアウトで DB チェックする
+  if (!tenant.isActive) {
+    redirect("/login?error=disabled");
+  }
 
   // フィーチャートグル: training_record の値を取得
   const trainingFeature = await prisma.tenantSetting.findUnique({
@@ -57,6 +67,7 @@ export default async function DashboardLayout({ children, params }: Props) {
       <Sidebar
         tenantSlug={slug}
         tenantName={tenant.name}
+        loginId={session?.user?.loginId}
         trainingEnabled={trainingEnabled}
       />
 
@@ -65,6 +76,7 @@ export default async function DashboardLayout({ children, params }: Props) {
         <Header tenantName={tenant.name} pendingCount={pendingCount} />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
+      <Toaster richColors position="bottom-right" />
     </div>
   );
 }

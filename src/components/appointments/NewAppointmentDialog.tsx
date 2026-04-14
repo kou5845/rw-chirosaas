@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * 予約新規作成ダイアログ（汎用版）
+ * 予約作成・編集ダイアログ（汎用版）
  *
  * 患者詳細ページ（patientId 固定）と予約管理ページ（患者を検索選択）の
- * 両方で使用できる。
+ * 両方で使用できる。editMode を渡すと編集モードで動作する。
  *
  * CLAUDE.md 規約:
  *   - 予約は pending ステータスで作成（require_approval 必須）
@@ -13,15 +13,13 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import {
-  X, CalendarPlus, Loader2, AlertCircle, CheckCircle2,
+  X, CalendarPlus, Pencil, Loader2, AlertCircle, CheckCircle2,
   Clock, Search, User,
 } from "lucide-react";
 import {
-  createAppointment,
-  type CreateAppointmentState,
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore – path contains dynamic segment brackets, valid at runtime
-} from "@/app/[tenantId]/patients/[patientId]/appointments/actions";
+  upsertAppointment,
+  type UpsertAppointmentState,
+} from "@/app/[tenantId]/appointments/upsert-action";
 
 export type BusinessHourData = {
   dayOfWeek: number;
@@ -32,6 +30,19 @@ export type BusinessHourData = {
 
 type Staff   = { id: string; displayName: string };
 type Patient = { id: string; displayName: string };
+
+export type EditModeData = {
+  appointmentId: string;
+  patientId:     string;
+  patientName:   string;
+  date:          string;   // "YYYY-MM-DD"
+  time:          string;   // "HH:mm"
+  menuName:      string;
+  durationMin:   number;
+  price:         number;
+  staffId?:      string | null;
+  note?:         string | null;
+};
 
 type Props = {
   tenantId:       string;
@@ -50,6 +61,8 @@ type Props = {
   initialDate?:   string;
   /** カレンダーのスロットクリックで渡される初期時刻 "HH:mm" */
   initialTime?:   string;
+  /** 渡すと編集モードとして動作する */
+  editMode?:      EditModeData;
   onClose:        () => void;
 };
 
@@ -140,9 +153,9 @@ function PatientSelector({
   patientList: Patient[];
   onSelect: (p: Patient | null) => void;
 }) {
-  const [query,       setQuery]       = useState("");
-  const [selected,    setSelected]    = useState<Patient | null>(null);
-  const [open,        setOpen]        = useState(false);
+  const [query,    setQuery]    = useState("");
+  const [selected, setSelected] = useState<Patient | null>(null);
+  const [open,     setOpen]     = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const filtered = query.length === 0
@@ -151,7 +164,6 @@ function PatientSelector({
         .filter((p) => p.displayName.includes(query))
         .slice(0, 30);
 
-  // 外クリックで閉じる
   useEffect(() => {
     function onDown(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -237,22 +249,25 @@ export function NewAppointmentDialog({
   slotInterval = 30,
   initialDate,
   initialTime,
+  editMode,
   onClose,
 }: Props) {
+  const isEdit = !!editMode;
   const TIME_OPTIONS = buildTimeOptions(slotInterval);
-  const [state, action, isPending] = useActionState<CreateAppointmentState, FormData>(
-    createAppointment,
+
+  const [state, action, isPending] = useActionState<UpsertAppointmentState, FormData>(
+    upsertAppointment,
     null
   );
 
-  // バリデーション用制御値
-  const [selectedDate,     setSelectedDate]     = useState(initialDate  ?? "");
-  const [selectedTime,     setSelectedTime]     = useState(initialTime  ?? "");
-  const [selectedDuration, setSelectedDuration] = useState(0);
+  // バリデーション用制御値（編集モードでは既存値で初期化）
+  const [selectedDate,     setSelectedDate]     = useState(editMode?.date     ?? initialDate  ?? "");
+  const [selectedTime,     setSelectedTime]     = useState(editMode?.time     ?? initialTime  ?? "");
+  const [selectedDuration, setSelectedDuration] = useState(editMode?.durationMin ?? 0);
 
   // 患者選択（patientId 未固定の場合）
   const [selectedPatient, setSelectedPatient] = useState<{ id: string; displayName: string } | null>(null);
-  const needPatientSelect = !patientId;
+  const needPatientSelect = !patientId && !editMode?.patientId;
 
   // 成功後: 0.9秒後に自動クローズ
   useEffect(() => {
@@ -268,9 +283,12 @@ export function NewAppointmentDialog({
     selectedDate, selectedTime, selectedDuration,
     businessHours, lunchStartTime, lunchEndTime,
   );
-  const hasSlotError   = slotWarning !== null && Boolean(selectedDate && selectedTime && selectedDuration);
+  const hasSlotError    = slotWarning !== null && Boolean(selectedDate && selectedTime && selectedDuration);
   const hasPatientError = needPatientSelect && !selectedPatient;
-  const blockSubmit    = hasSlotError || hasPatientError;
+  const blockSubmit     = hasSlotError || hasPatientError;
+
+  // 編集モードの実効 patientId
+  const effectivePatientId = patientId ?? editMode?.patientId;
 
   return (
     <div
@@ -283,11 +301,17 @@ export function NewAppointmentDialog({
         <div className="flex items-center justify-between border-b border-gray-100 bg-[var(--brand-bg)] px-6 py-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-white">
-              <CalendarPlus size={15} />
+              {isEdit ? <Pencil size={15} /> : <CalendarPlus size={15} />}
             </div>
             <div>
-              <p className="text-sm font-semibold text-[var(--brand-darker)]">新規予約を追加</p>
-              <p className="text-xs text-[var(--brand-dark)]/70">予約は「仮受付」として登録されます</p>
+              <p className="text-sm font-semibold text-[var(--brand-darker)]">
+                {isEdit ? "予約を編集" : "新規予約を追加"}
+              </p>
+              <p className="text-xs text-[var(--brand-dark)]/70">
+                {isEdit
+                  ? `${editMode.patientName} さんの予約を変更します`
+                  : "予約は「確定済み」として登録されます"}
+              </p>
             </div>
           </div>
           <button onClick={onClose} aria-label="閉じる"
@@ -300,7 +324,9 @@ export function NewAppointmentDialog({
         {state?.success ? (
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
             <CheckCircle2 size={40} className="text-emerald-500" />
-            <p className="text-sm font-semibold text-gray-800">予約を登録しました</p>
+            <p className="text-sm font-semibold text-gray-800">
+              {isEdit ? "予約を更新しました" : "予約を登録しました"}
+            </p>
             <p className="text-xs text-gray-400">予約一覧・患者詳細に反映されました</p>
           </div>
         ) : (
@@ -308,10 +334,11 @@ export function NewAppointmentDialog({
             {/* hidden */}
             <input type="hidden" name="tenantId"   value={tenantId} />
             <input type="hidden" name="tenantSlug" value={tenantSlug} />
-            {patientId && <input type="hidden" name="patientId" value={patientId} />}
-            {!patientId && selectedPatient && (
+            {effectivePatientId && <input type="hidden" name="patientId" value={effectivePatientId} />}
+            {!effectivePatientId && selectedPatient && (
               <input type="hidden" name="patientId" value={selectedPatient.id} />
             )}
+            {isEdit && <input type="hidden" name="appointmentId" value={editMode.appointmentId} />}
 
             <div className="max-h-[72vh] overflow-y-auto">
               <div className="divide-y divide-gray-50 px-6">
@@ -324,7 +351,7 @@ export function NewAppointmentDialog({
                   </div>
                 )}
 
-                {/* ── 患者選択（patientId 未固定の場合のみ）── */}
+                {/* ── 患者選択（patientId 未固定 + 編集モード外の場合のみ）── */}
                 {needPatientSelect && (
                   <div className="py-4">
                     <label className="block text-sm font-medium text-gray-700">
@@ -343,6 +370,19 @@ export function NewAppointmentDialog({
                   </div>
                 )}
 
+                {/* 編集モード: 患者名表示（読み取り専用）*/}
+                {isEdit && (
+                  <div className="py-4">
+                    <p className="text-sm font-medium text-gray-700">患者</p>
+                    <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--brand-bg)] text-xs font-bold text-[var(--brand-dark)]">
+                        {editMode.patientName.slice(0, 1)}
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">{editMode.patientName}</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* ── 予約日 + 時間 ── */}
                 <div className="grid grid-cols-2 gap-4 py-4">
                   <div>
@@ -353,7 +393,7 @@ export function NewAppointmentDialog({
                       id="appt-date"
                       name="date"
                       type="date"
-                      min={today}
+                      min={isEdit ? undefined : today}
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                       className={`${inputCls} ${errors?.date ? errCls : ""}`}
@@ -403,6 +443,7 @@ export function NewAppointmentDialog({
                     id="appt-menu"
                     name="menuName"
                     type="text"
+                    defaultValue={editMode?.menuName ?? ""}
                     placeholder="例: 整体施術60分、骨盤矯正"
                     className={`${inputCls} ${errors?.menuName ? errCls : ""}`}
                   />
@@ -448,6 +489,7 @@ export function NewAppointmentDialog({
                       inputMode="numeric"
                       min={0}
                       step={100}
+                      defaultValue={editMode?.price ?? ""}
                       placeholder="例: 5000"
                       className={`${inputCls} ${errors?.price ? errCls : ""}`}
                     />
@@ -465,7 +507,12 @@ export function NewAppointmentDialog({
                     <label htmlFor="appt-staff" className="block text-sm font-medium text-gray-700">
                       担当スタッフ<span className="ml-1 text-xs font-normal text-gray-400">任意</span>
                     </label>
-                    <select id="appt-staff" name="staffId" defaultValue="" className={selectCls}>
+                    <select
+                      id="appt-staff"
+                      name="staffId"
+                      defaultValue={editMode?.staffId ?? ""}
+                      className={selectCls}
+                    >
                       <option value="">指定なし</option>
                       {staffList.map((s) => (
                         <option key={s.id} value={s.id}>{s.displayName}</option>
@@ -483,10 +530,29 @@ export function NewAppointmentDialog({
                     id="appt-note"
                     name="note"
                     rows={3}
+                    defaultValue={editMode?.note ?? ""}
                     placeholder="患者からの要望・院内メモなど"
                     className="mt-1.5 block w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 placeholder:text-gray-300 hover:border-[var(--brand-border)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-transparent transition-colors"
                   />
                 </div>
+
+                {/* ── 通知チェックボックス（新規作成のみ）── */}
+                {!isEdit && (
+                  <div className="py-4">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        name="sendNotification"
+                        defaultChecked
+                        className="h-4 w-4 rounded border-gray-300 text-[var(--brand-medium)] accent-[var(--brand-medium)] focus:ring-[var(--brand)]"
+                      />
+                      <span className="text-sm text-gray-700">
+                        患者に通知を送る
+                        <span className="ml-1.5 text-xs text-gray-400">（メール・LINE）</span>
+                      </span>
+                    </label>
+                  </div>
+                )}
 
               </div>
             </div>
@@ -500,7 +566,9 @@ export function NewAppointmentDialog({
               <button type="submit" disabled={isPending || blockSubmit}
                 className="flex h-11 items-center gap-2 rounded-xl bg-[var(--brand-medium)] px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--brand-dark)] disabled:cursor-not-allowed disabled:opacity-60">
                 {isPending ? (
-                  <><Loader2 size={15} className="animate-spin" />登録中…</>
+                  <><Loader2 size={15} className="animate-spin" />{isEdit ? "更新中…" : "登録中…"}</>
+                ) : isEdit ? (
+                  <><Pencil size={15} />変更を保存する</>
                 ) : (
                   <><CalendarPlus size={15} />予約を登録する</>
                 )}

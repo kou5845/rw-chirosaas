@@ -8,29 +8,32 @@ import {
   Users,
   FileText,
   Dumbbell,
+  Syringe,
   Settings,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoutButton } from "./LogoutButton";
 
 type NavItem = {
   label: string;
   href: string;
   icon: React.ElementType;
-  /** true の場合、フィーチャートグルで無効になりうる項目 */
-  featureGated?: boolean;
+  /** フィーチャーキー: このキーが false の場合は非表示 */
+  featureKey?: "training";
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "ダッシュボード", href: "dashboard", icon: LayoutDashboard },
+  { label: "ダッシュボード", href: "dashboard",    icon: LayoutDashboard },
   { label: "予約一覧",       href: "appointments", icon: CalendarDays },
   { label: "患者管理",       href: "patients",     icon: Users },
-  { label: "カルテ",         href: "kartes",        icon: FileText },
+  { label: "カルテ",         href: "kartes",       icon: FileText },
+  { label: "施術管理",       href: "services",     icon: Syringe },
   {
-    label: "トレーニング管理",
-    href: "training",
-    icon: Dumbbell,
-    featureGated: true,
+    label:      "トレーニング管理",
+    href:       "trainings",
+    icon:       Dumbbell,
+    featureKey: "training",
   },
 ];
 
@@ -39,13 +42,15 @@ const BOTTOM_ITEMS: NavItem[] = [
 ];
 
 type Props = {
-  tenantSlug: string;
-  tenantName: string;
+  tenantSlug:      string;
+  tenantName:      string;
+  /** ログイン中のユーザーのログインID */
+  loginId?:        string;
   /** training_record フィーチャートグルの値 */
   trainingEnabled: boolean;
 };
 
-export function Sidebar({ tenantSlug, tenantName, trainingEnabled }: Props) {
+export function Sidebar({ tenantSlug, tenantName, loginId, trainingEnabled }: Props) {
   const pathname = usePathname();
 
   const isActive = (href: string) =>
@@ -54,7 +59,7 @@ export function Sidebar({ tenantSlug, tenantName, trainingEnabled }: Props) {
 
   const renderNavItem = (item: NavItem) => {
     // フィーチャートグルで無効な項目は非表示
-    if (item.featureGated && item.href === "training" && !trainingEnabled) {
+    if (item.featureKey === "training" && !trainingEnabled) {
       return null;
     }
 
@@ -136,16 +141,19 @@ export function Sidebar({ tenantSlug, tenantName, trainingEnabled }: Props) {
           {BOTTOM_ITEMS.map(renderNavItem)}
         </ul>
 
-        {/* ユーザー情報プレースホルダー */}
-        <div className="mt-2 flex items-center gap-3 rounded-lg px-3 py-2.5">
+        {/* ログイン中のユーザー情報 + ログアウト */}
+        <div className="mt-2 flex items-center gap-2 rounded-lg bg-gradient-to-r from-[var(--brand)]/10 to-transparent px-3 py-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-bg)] text-sm font-semibold text-[var(--brand-dark)]">
-            管
+            {(loginId ?? "管").slice(0, 1).toUpperCase()}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-medium text-gray-700">
-              管理者
+              {loginId ?? "管理者"}
             </p>
-            <p className="truncate text-[10px] text-gray-400">admin</p>
+            <p className="truncate text-[10px] text-gray-400">ログイン中</p>
+          </div>
+          <div className="shrink-0">
+            <LogoutButton />
           </div>
         </div>
       </div>

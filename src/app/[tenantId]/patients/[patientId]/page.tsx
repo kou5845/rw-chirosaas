@@ -15,57 +15,21 @@ import {
   Calendar,
   AlertTriangle,
   MessageCircle,
-  FileText,
-  Dumbbell,
-  MapPin,
   StickyNote,
   Activity,
-  CheckSquare,
-  Sparkles,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { calcAge, formatDateJa, formatDateTimeJa, formatPatientId, getInitial } from "@/lib/format";
+import { calcAge, formatDateJa, formatPatientId, getInitial } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { ConditionStatus, KarteMode } from "@prisma/client";
 import { AppointmentSection } from "./AppointmentSection";
+import { PatientActions } from "./PatientActions";
+import { KarteSection, type KarteForDisplay } from "./KarteSection";
+import type { ExerciseChartData } from "./TrainingAnalysisTab";
+import { createSupabaseAdmin, KARTE_MEDIA_BUCKET } from "@/lib/supabase";
 
 type Props = {
   params: Promise<{ tenantId: string; patientId: string }>;
 };
-
-// ── 状態評価バッジ ────────────────────────────────────────────────
-const CONDITION_STATUS_CONFIG: Record<
-  ConditionStatus,
-  { label: string; bg: string; text: string; border: string }
-> = {
-  good:   { label: "良好",     bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-  fair:   { label: "普通",     bg: "bg-sky-50",     text: "text-sky-700",     border: "border-sky-200" },
-  pain:   { label: "痛い",     bg: "bg-orange-50",  text: "text-orange-700",  border: "border-orange-200" },
-  severe: { label: "強い痛み", bg: "bg-red-50",     text: "text-red-700",     border: "border-red-200" },
-};
-
-function ConditionBadge({ status }: { status: ConditionStatus }) {
-  const c = CONDITION_STATUS_CONFIG[status];
-  return (
-    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold", c.bg, c.text, c.border)}>
-      {c.label}
-    </span>
-  );
-}
-
-// ── カルテモードバッジ ────────────────────────────────────────────
-function KarteModeBadge({ mode }: { mode: KarteMode }) {
-  return mode === "professional" ? (
-    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--brand-border)] bg-[var(--brand-bg)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--brand-dark)]">
-      <Sparkles size={10} />
-      Professional
-    </span>
-  ) : (
-    <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium text-gray-500">
-      Simple
-    </span>
-  );
-}
 
 // ── 情報行コンポーネント ──────────────────────────────────────────
 function InfoRow({
@@ -129,11 +93,27 @@ export default async function PatientDetailPage({ params }: Props) {
       tenantId:  tenant.id, // CLAUDE.md 絶対ルール
       patientId: patient.id,
     },
-    include: {
-      staff: { select: { displayName: true } },
+    select: {
+      id:                true,
+      karteType:         true,
+      karteModeSnapshot: true,
+      conditionNote:     true,
+      progressNote:      true,
+      conditionStatus:   true,
+      bodyParts:         true,
+      treatments:        true,
+      createdAt:         true,
+      staff:             { select: { displayName: true } },
       exerciseRecords: {
-        include: {
-          exercise: { select: { name: true, category: true } },
+        select: {
+          id:          true,
+          exerciseId:  true,
+          sets:        true,
+          reps:        true,
+          weightKg:    true,
+          durationSec: true,
+          memo:        true,
+          exercise:    { select: { name: true, category: true } },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -144,6 +124,106 @@ export default async function PatientDetailPage({ params }: Props) {
     },
     orderBy: { createdAt: "desc" },
   });
+
+  // ── 署名付きURLの一括生成（メディアがある場合）─────────────────────
+  // 1時間有効。Supabaseは1回100件まで署名可能なのでチャンク化して取得する
+  const allMediaPaths = kartes.flatMap((k) => k.media.map((m) => m.storagePath));
+  const signedUrlMap = new Map<string, string>();
+  
+  if (allMediaPaths.length > 0) {
+    const supabase = createSupabaseAdmin();
+    for (let i = 0; i < allMediaPaths.length; i += 100) {
+      const chunk = allMediaPaths.slice(i, i + 100);
+      const { data, error } = await supabase.storage
+        .from(KARTE_MEDIA_BUCKET)
+        .createSignedUrls(chunk, 60 * 60);
+      
+      if (!error && data) {
+        // 返却された配列は入力配列と同じ順序
+        for (let j = 0; j < chunk.length; j++) {
+          const item = data[j];
+          if (item && item.signedUrl) {
+            signedUrlMap.set(chunk[j], item.signedUrl);
+          }
+        }
+      }
+    }
+  }
+
+  // 生成したURLをマージ
+  const kartesWithUrls = kartes.map((k) => ({
+    ...k,
+    media: k.media.map((m) => ({
+      ...m,
+      signedUrl: signedUrlMap.get(m.storagePath) ?? null,
+    })),
+  }));
+
+  // ── トレーニング分析グラフ用データ集計（training_record が有効な場合のみ）──
+  // CLAUDE.md 規約: ビジネスロジックは Server Component で処理する
+  const exerciseChartData: ExerciseChartData[] = [];
+  if (trainingEnabled) {
+    // exerciseId → { name, category, records[] } のマップを構築
+    const exerciseMap = new Map<string, ExerciseChartData>();
+
+    for (const karte of kartes) {
+      const dateStr = karte.createdAt.toISOString().split("T")[0]; // "YYYY-MM-DD"
+      const dateLabel = dateStr.slice(5).replace("-", "/"); // "MM/DD"
+
+      for (const rec of karte.exerciseRecords) {
+        const exId   = rec.exercise.name; // 名前をキーにする（同名＝同種目として集計）
+        const wKg    = rec.weightKg ? Number(rec.weightKg) : 0;
+        const reps   = rec.reps    ?? 0;
+        const sets   = rec.sets    ?? 0;
+
+        // 総ボリューム: 重量 × 回数 × セット数
+        const volume = wKg * reps * sets;
+
+        // 1RM推定（Epley式）: weight × (1 + reps / 30)
+        const orm = reps > 0 && wKg > 0
+          ? Math.round(wKg * (1 + reps / 30) * 10) / 10
+          : 0;
+
+        if (!exerciseMap.has(exId)) {
+          exerciseMap.set(exId, {
+            exerciseId:   exId,
+            exerciseName: rec.exercise.name,
+            category:     rec.exercise.category,
+            records:      [],
+          });
+        }
+
+        exerciseMap.get(exId)!.records.push({
+          date:      dateStr,
+          dateLabel,
+          volume:    Math.round(volume * 10) / 10,
+          orm,
+          sets:      rec.sets,
+          reps:      rec.reps,
+          weightKg:  wKg > 0 ? wKg : null,
+        });
+      }
+    }
+
+    // 日付昇順にソートして配列へ
+    for (const data of exerciseMap.values()) {
+      data.records.sort((a, b) => a.date.localeCompare(b.date));
+      exerciseChartData.push(data);
+    }
+
+    // 種目名でアルファベット昇順ソート
+    exerciseChartData.sort((a, b) => a.exerciseName.localeCompare(b.exerciseName));
+  }
+
+  // ── 種目マスタ取得（編集ダイアログ用: Professional + training_record 有効時のみ）──
+  const exercises =
+    isProfessional && trainingEnabled
+      ? await prisma.exercise.findMany({
+          where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
+          select:  { id: true, name: true, category: true, unit: true },
+          orderBy: [{ category: "asc" }, { name: "asc" }],
+        })
+      : [];
 
   // ── 曜日別営業時間 ────────────────────────────────────────────
   const businessHours = await prisma.businessHour.findMany({
@@ -215,23 +295,40 @@ export default async function PatientDetailPage({ params }: Props) {
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
             {/* カラーヘッダー */}
             <div className="bg-gradient-to-br from-[var(--brand)] to-[var(--brand-medium)] px-6 py-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20 text-xl font-bold text-white backdrop-blur-sm">
-                  {getInitial(patient.displayName)}
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-white/70">
-                    {formatPatientId(patient.id)}
-                  </p>
-                  <p className="text-lg font-bold text-white">
-                    {patient.displayName}
-                  </p>
-                  {patient.birthDate && (
-                    <p className="mt-0.5 text-xs text-white/80">
-                      {calcAge(patient.birthDate)}歳
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20 text-xl font-bold text-white backdrop-blur-sm">
+                    {getInitial(patient.displayName)}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-white/70">
+                      {formatPatientId(patient.id)}
                     </p>
-                  )}
+                    <p className="text-lg font-bold text-white">
+                      {patient.displayName}
+                    </p>
+                    {patient.birthDate && (
+                      <p className="mt-0.5 text-xs text-white/80">
+                        {calcAge(patient.birthDate)}歳
+                      </p>
+                    )}
+                  </div>
                 </div>
+                {/* 編集・削除ボタン */}
+                <PatientActions
+                  patient={{
+                    id:              patient.id,
+                    displayName:     patient.displayName,
+                    nameKana:        patient.nameKana,
+                    phone:           patient.phone,
+                    email:           patient.email,
+                    birthDate:       patient.birthDate,
+                    emergencyContact: patient.emergencyContact,
+                    memo:            patient.memo,
+                  }}
+                  tenantId={tenant.id}
+                  tenantSlug={slug}
+                />
               </div>
             </div>
 
@@ -331,234 +428,18 @@ export default async function PatientDetailPage({ params }: Props) {
             slotInterval={tenant.slotInterval}
           />
 
-          {/* ── カルテ履歴セクション ── */}
-          {/* セクションヘッダー */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText size={16} className="text-[var(--brand-medium)]" />
-              <h2 className="text-sm font-semibold text-gray-800">
-                カルテ履歴
-                <span className="ml-2 text-gray-400 font-normal">
-                  ({kartes.length}件)
-                </span>
-              </h2>
-            </div>
-            {/* カルテ追加ボタン */}
-            <Link
-              href={`/${slug}/patients/${patientId}/kartes/new`}
-              className="flex h-8 items-center gap-1.5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] px-3 text-xs font-medium text-[var(--brand-dark)] transition-colors hover:bg-[var(--brand-hover)]"
-            >
-              <FileText size={13} />
-              カルテを追加
-            </Link>
-          </div>
-
-          {/* カルテが0件 */}
-          {kartes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 py-16 text-center">
-              <FileText size={36} className="text-gray-200" />
-              <p className="mt-3 text-sm font-medium text-gray-400">
-                カルテが登録されていません
-              </p>
-              <p className="mt-1 text-xs text-gray-300">
-                施術完了後にカルテを入力してください
-              </p>
-            </div>
-          ) : (
-            /* タイムライン */
-            <div className="relative space-y-4">
-              {/* タイムライン縦線 */}
-              <div className="absolute left-[22px] top-0 h-full w-px bg-gray-100" />
-
-              {kartes.map((karte) => (
-                <div key={karte.id} className="relative flex gap-4">
-                  {/* タイムラインドット */}
-                  <div className="relative z-10 mt-5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[var(--brand-bg)] shadow-sm">
-                    <FileText size={16} className="text-[var(--brand-dark)]" />
-                  </div>
-
-                  {/* カルテカード */}
-                  <div className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-
-                    {/* カードヘッダー */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-800">
-                          {formatDateTimeJa(karte.createdAt)}
-                        </span>
-                        <KarteModeBadge mode={karte.karteModeSnapshot} />
-                      </div>
-                      {karte.staff && (
-                        <span className="text-xs text-gray-500">
-                          担当: {karte.staff.displayName}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* カード本文 */}
-                    <div className="space-y-4 p-5">
-
-                      {/* 状態評価（professional モードのみ）*/}
-                      {karte.conditionStatus && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400">状態評価</span>
-                          <ConditionBadge status={karte.conditionStatus} />
-                        </div>
-                      )}
-
-                      {/* 症状・経過メモ */}
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {karte.conditionNote && (
-                          <div>
-                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                              症状・主訴
-                            </p>
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-                              {karte.conditionNote}
-                            </p>
-                          </div>
-                        )}
-                        {karte.progressNote && (
-                          <div>
-                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                              経過・所見
-                            </p>
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-                              {karte.progressNote}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* ── Professional モード専用フィールド ── */}
-                      {isProfessional && (
-                        <>
-                          {/* 部位選択 */}
-                          {karte.bodyParts.length > 0 && (
-                            <div>
-                              <p className="mb-1.5 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                <MapPin size={11} />
-                                施術部位
-                              </p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {karte.bodyParts.map((part) => (
-                                  <span
-                                    key={part}
-                                    className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] px-2.5 py-1 text-xs font-medium text-[var(--brand-dark)]"
-                                  >
-                                    {part}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 施術内容 */}
-                          {karte.treatments.length > 0 && (
-                            <div>
-                              <p className="mb-1.5 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                <CheckSquare size={11} />
-                                施術内容
-                              </p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {karte.treatments.map((t) => (
-                                  <span
-                                    key={t}
-                                    className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600"
-                                  >
-                                    {t}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      {/* ── トレーニング記録（training_record トグル ON の場合のみ）── */}
-                      {trainingEnabled && karte.exerciseRecords.length > 0 && (
-                        <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-bg)]/40 p-4">
-                          <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--brand-dark)]">
-                            <Dumbbell size={13} />
-                            トレーニング記録（{karte.exerciseRecords.length}種目）
-                          </p>
-                          <div className="space-y-2">
-                            {karte.exerciseRecords.map((rec) => (
-                              <div
-                                key={rec.id}
-                                className="flex items-center justify-between gap-4 rounded-lg bg-white px-4 py-2.5 shadow-sm"
-                              >
-                                <div>
-                                  <p className="text-sm font-semibold text-gray-800">
-                                    {rec.exercise.name}
-                                  </p>
-                                  {rec.exercise.category && (
-                                    <p className="text-[11px] text-gray-400">
-                                      {rec.exercise.category}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-3 text-right text-xs text-gray-600">
-                                  {rec.sets && rec.reps && (
-                                    <span className="font-mono">
-                                      {rec.sets}set × {rec.reps}rep
-                                    </span>
-                                  )}
-                                  {rec.weightKg && Number(rec.weightKg) > 0 && (
-                                    <span className="font-mono text-[var(--brand-dark)]">
-                                      {rec.weightKg.toString()}kg
-                                    </span>
-                                  )}
-                                  {rec.durationSec && (
-                                    <span className="font-mono">{rec.durationSec}秒</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                            {/* メモ（最初のレコードのメモを代表表示）*/}
-                            {karte.exerciseRecords[0]?.memo && (
-                              <p className="mt-2 text-xs italic text-[var(--brand-dark)]">
-                                💬 {karte.exerciseRecords[0].memo}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* メディアファイル枠（professional モード）*/}
-                      {isProfessional && (
-                        <div className="rounded-xl border border-dashed border-gray-200 p-3">
-                          {karte.media.length > 0 ? (
-                            <div>
-                              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                添付ファイル（{karte.media.length}件）
-                              </p>
-                              <div className="flex flex-wrap gap-2">
-                                {karte.media.map((m) => (
-                                  <span
-                                    key={m.id}
-                                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-600"
-                                  >
-                                    {m.mediaType === "video" ? "🎬" : "🖼"}
-                                    {m.mediaType === "video" ? "動画" : "画像"}
-                                    {/* ⚠️ 実際の表示時は Signed URL を生成すること（CLAUDE.md 規約）*/}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-center text-xs text-gray-300">
-                              添付ファイルなし
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* ── カルテ履歴セクション（タブ切り替え対応）── */}
+          <KarteSection
+            kartes={kartesWithUrls as KarteForDisplay[]}
+            isProfessional={isProfessional}
+            trainingEnabled={trainingEnabled}
+            slug={slug}
+            patientId={patient.id}
+            patientName={patient.displayName}
+            tenantId={tenant.id}
+            exercises={exercises}
+            exerciseChartData={exerciseChartData}
+          />
         </main>
       </div>
     </div>

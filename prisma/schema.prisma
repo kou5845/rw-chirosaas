@@ -6,6 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 // Prisma 7: 接続URLは prisma.config.ts で管理する（schema.prismaには記述不要）
@@ -54,6 +55,12 @@ enum MediaType {
   video
 }
 
+/// カルテの種別。MEDICAL=施術記録、TRAINING=トレーニング記録。
+enum KarteType {
+  MEDICAL   // 施術カルテ（デフォルト）
+  TRAINING  // トレーニングカルテ
+}
+
 enum NotificationChannel {
   line
   email
@@ -85,6 +92,13 @@ model Tenant {
   logoUrl     String?    @map("logo_url")
   colorTheme  Json?      @map("color_theme") // {"primary": "#3B82F6", "accent": "#10B981"}
   plan        TenantPlan @default(standard)
+  phone                  String?    @db.VarChar(20)
+  address                String?    @db.VarChar(255)
+  lineChannelSecret      String?    @map("line_channel_secret")
+  lineChannelAccessToken String?    @map("line_channel_access_token")
+  lineFriendUrl          String?    @map("line_friend_url")
+  lineEnabled            Boolean    @default(true)  @map("line_enabled")
+  emailEnabled           Boolean    @default(false) @map("email_enabled")
   isActive           Boolean    @default(true) @map("is_active")
   businessStartTime  String     @default("09:00") @map("business_start_time") @db.VarChar(5)
   businessEndTime    String     @default("20:00") @map("business_end_time")   @db.VarChar(5)
@@ -98,6 +112,7 @@ model Tenant {
   createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   // Relations
+  user              User?
   settings          TenantSetting[]
   businessHours     BusinessHour[]
   profiles          Profile[]
@@ -105,9 +120,50 @@ model Tenant {
   appointments      Appointment[]
   kartes            Karte[]
   exercises         Exercise[]
+  services          Service[]
   notificationQueue NotificationQueue[]
 
   @@map("tenants")
+}
+
+/// 認証ユーザー（テナント管理者）。bcrypt でパスワードハッシュ化して保存。
+/// CLAUDE.md 規約: 1テナントにつき 1ユーザーが基本（スタッフ追加は Phase 2）
+model User {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @unique @map("tenant_id") @db.Uuid
+  loginId   String   @unique @map("login_id") @db.VarChar(64)
+  email     String   @unique @db.VarChar(255)
+  password  String   @db.VarChar(255) // bcrypt ハッシュ
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("users")
+}
+
+/// SaaS 運営者（システム管理者）アカウント。テナントに属さない特権ユーザー。
+/// `/admin` 配下のページにのみアクセスできる。
+model SuperAdmin {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  password  String   @db.VarChar(255) // bcrypt ハッシュ
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("super_admins")
+}
+
+/// パスワード再設定トークン。有効期限 1時間。
+model PasswordResetToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String   @db.VarChar(255)
+  token     String   @unique @db.VarChar(255)
+  expires   DateTime @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([email])
+  @@map("password_reset_tokens")
 }
 
 /// フィーチャートグル設定テーブル。
@@ -171,7 +227,7 @@ model Patient {
   email            String?   @db.VarChar(255)
   phone            String?   @db.VarChar(20)
   birthDate        DateTime? @map("birth_date") @db.Date
-  lineUserId       String?   @map("line_user_id") @db.VarChar(64) // LINE ユーザーID
+  lineUserId       String?   @unique @map("line_user_id") @db.VarChar(64) // LINE ユーザーID
   emergencyContact String?   @map("emergency_contact") @db.VarChar(255)
   memo             String?   // 院内メモ（患者非表示）
   isActive         Boolean   @default(true) @map("is_active")
@@ -213,6 +269,9 @@ model Appointment {
   // キャンセル情報
   cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz
   cancelledBy String?   @map("cancelled_by") @db.Uuid
+
+  // リマインダー送信済みフラグ（二重送信防止）
+  reminderSent Boolean @default(false) @map("reminder_sent")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -261,6 +320,7 @@ model Karte {
   patientId           String         @map("patient_id") @db.Uuid
   staffId             String?        @map("staff_id") @db.Uuid
   karteModeSnapshot   KarteMode      @map("karte_mode_snapshot") // 記録時点のモードを固定保存
+  karteType           KarteType      @default(MEDICAL) @map("karte_type") // MEDICAL=施術, TRAINING=トレーニング
 
   // simple / professional 共通
   conditionNote       String?        @map("condition_note")   // 症状メモ
@@ -314,6 +374,7 @@ model Exercise {
   tenantId  String   @map("tenant_id") @db.Uuid
   name      String   @db.VarChar(255) // 種目名（例: "スクワット"）
   category  String?  @db.VarChar(64)  // カテゴリ（例: "下半身", "体幹"）
+  unit      String?  @db.VarChar(32)  // 単位（例: "kg", "回", "秒"）
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -375,7 +436,30 @@ model NotificationQueue {
 }
 
 // ============================================================
-// 5. 曜日別営業時間
+// 5. 施術マスタ
+// ============================================================
+
+/// 施術メニューマスタ。予約作成ダイアログや患者向けフォームで選択肢として使用する。
+/// CLAUDE.md 規約: tenantId で論理分離。直接 DB クエリ時は必ず tenantId フィルタを含めること。
+model Service {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String   @db.VarChar(255)  // 施術名（例: "整体コース"）
+  duration    Int                         // 所要時間（分）
+  price       Int                         // 料金（円）
+  description String?                     // 施術の説明
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt       @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("services")
+}
+
+// ============================================================
+// 6. 曜日別営業時間
 // ============================================================
 
 /// 曜日ごとの営業時間設定。

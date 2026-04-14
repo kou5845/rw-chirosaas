@@ -10,6 +10,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { sendUpdateNotification } from "@/lib/notificationService";
 
 type Input = {
   appointmentId: string;
@@ -31,10 +32,21 @@ export async function rescheduleAppointment({
   });
   if (!tenant) return { success: false, error: "テナントが見つかりません" };
 
-  // 予約がこのテナントに属することを確認
+  // 予約がこのテナントに属することを確認（通知用に詳細も取得）
   const appt = await prisma.appointment.findFirst({
     where:  { id: appointmentId, tenantId: tenant.id },
-    select: { id: true, status: true },
+    select: {
+      id:          true,
+      status:      true,
+      startAt:     true,
+      endAt:       true,
+      menuName:    true,
+      durationMin: true,
+      price:       true,
+      patient: {
+        select: { displayName: true, lineUserId: true, email: true },
+      },
+    },
   });
   if (!appt) return { success: false, error: "予約が見つかりません" };
 
@@ -66,6 +78,9 @@ export async function rescheduleAppointment({
     };
   }
 
+  const oldStartAt = appt.startAt;
+  const oldEndAt   = appt.endAt;
+
   try {
     await prisma.appointment.update({
       where: { id: appointmentId },
@@ -74,6 +89,27 @@ export async function rescheduleAppointment({
   } catch (err) {
     console.error("[rescheduleAppointment]", err);
     return { success: false, error: "予約の更新に失敗しました。再度お試しください。" };
+  }
+
+  // 変更通知を非同期送信（失敗してもリスケジュール自体は成功扱い）
+  const tenantInfo = await prisma.tenant.findUnique({
+    where:  { id: tenant.id },
+    select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true },
+  });
+  if (tenantInfo) {
+    sendUpdateNotification({
+      tenant:      tenantInfo,
+      patient:     appt.patient,
+      appointment: {
+        menuName:    appt.menuName,
+        durationMin: appt.durationMin,
+        price:       appt.price,
+        startAt:     newStartAt,
+        endAt:       newEndAt,
+      },
+      oldStartAt,
+      oldEndAt,
+    }).catch((e) => console.error("[rescheduleAppointment] 変更通知エラー:", e));
   }
 
   revalidatePath(`/${tenantSlug}/appointments`);

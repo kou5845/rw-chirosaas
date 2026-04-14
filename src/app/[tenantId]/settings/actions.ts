@@ -100,3 +100,123 @@ export async function updateTenantSettings(
 
   return { success: true };
 }
+
+// ── 基本情報更新 ──────────────────────────────────────────────────────
+
+export type ClinicInfoState = {
+  success?: boolean;
+  errors?: { general?: string; phone?: string };
+} | null;
+
+export async function updateClinicInfo(
+  _prev: ClinicInfoState,
+  formData: FormData
+): Promise<ClinicInfoState> {
+  const tenantSlug = formData.get("tenantSlug") as string;
+  if (!tenantSlug) return { errors: { general: "テナント情報が不正です。" } };
+
+  // CLAUDE.md 絶対ルール: DB照合でtenantIdを確定
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: tenantSlug },
+    select: { id: true },
+  });
+  if (!tenant) return { errors: { general: "テナントが見つかりません。" } };
+
+  const phone   = (formData.get("phone")   as string | null)?.trim() || null;
+  const address = (formData.get("address") as string | null)?.trim() || null;
+
+  if (phone && !/^[\d\-\(\)\s]{10,20}$/.test(phone)) {
+    return { errors: { phone: "正しい電話番号を入力してください（例: 03-1234-5678）。" } };
+  }
+
+  try {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data:  { phone, address },
+    });
+  } catch (err) {
+    console.error("[updateClinicInfo] DB error:", err);
+    return { errors: { general: "保存中にエラーが発生しました。" } };
+  }
+
+  revalidatePath(`/${tenantSlug}/settings`);
+  return { success: true };
+}
+
+// ── LINE 連携設定更新 ──────────────────────────────────────────────────
+
+export type LineSettingsState = {
+  success?: boolean;
+  errors?: { general?: string };
+} | null;
+
+export async function updateLineSettings(
+  _prev: LineSettingsState,
+  formData: FormData
+): Promise<LineSettingsState> {
+  const tenantSlug = formData.get("tenantSlug") as string;
+  if (!tenantSlug) return { errors: { general: "テナント情報が不正です。" } };
+
+  // CLAUDE.md 絶対ルール: DB照合でtenantIdを確定
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: tenantSlug },
+    select: { id: true },
+  });
+  if (!tenant) return { errors: { general: "テナントが見つかりません。" } };
+
+  const lineChannelSecret      = (formData.get("lineChannelSecret")      as string | null)?.trim() || null;
+  const lineChannelAccessToken = (formData.get("lineChannelAccessToken") as string | null)?.trim() || null;
+  const lineFriendUrl          = (formData.get("lineFriendUrl")          as string | null)?.trim() || null;
+
+  try {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data:  { lineChannelSecret, lineChannelAccessToken, lineFriendUrl },
+    });
+  } catch (err) {
+    console.error("[updateLineSettings] DB error:", err);
+    return { errors: { general: "保存中にエラーが発生しました。" } };
+  }
+
+  revalidatePath(`/${tenantSlug}/settings`);
+  return { success: true };
+}
+
+// ── 通知設定更新 ──────────────────────────────────────────────────────
+
+export type NotificationSettingsState = {
+  success?: boolean;
+  errors?: { general?: string };
+} | null;
+
+export async function updateNotificationSettings(
+  _prev: NotificationSettingsState,
+  formData: FormData
+): Promise<NotificationSettingsState> {
+  const tenantSlug = formData.get("tenantSlug") as string;
+  if (!tenantSlug) return { errors: { general: "テナント情報が不正です。" } };
+
+  // CLAUDE.md 絶対ルール: DB照合でtenantIdを確定
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: tenantSlug },
+    select: { id: true },
+  });
+  if (!tenant) return { errors: { general: "テナントが見つかりません。" } };
+
+  // チェックボックスは ON 時のみ値が送信される
+  const lineEnabled  = formData.get("lineEnabled")  === "on";
+  const emailEnabled = formData.get("emailEnabled") === "on";
+
+  try {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data:  { lineEnabled, emailEnabled },
+    });
+  } catch (err) {
+    console.error("[updateNotificationSettings] DB error:", err);
+    return { errors: { general: "保存中にエラーが発生しました。" } };
+  }
+
+  revalidatePath(`/${tenantSlug}/settings`);
+  return { success: true };
+}

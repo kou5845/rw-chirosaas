@@ -15,6 +15,7 @@ dotenv.config({ path: path.join(__dirname, "../.env.local") });
 
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import bcrypt from "bcryptjs";
 
 // シードスクリプトはダイレクト接続を使う
 // pgBouncer (DATABASE_URL) はローカル環境から疎通しない場合があるため
@@ -38,6 +39,10 @@ const IDS = {
   // Tenants
   TENANT_A: "00000000-0000-0000-0000-000000000001",
   TENANT_B: "00000000-0000-0000-0000-000000000002",
+
+  // Users（認証用）
+  USER_A: "30000000-0000-0000-0000-000000000001",
+  USER_B: "30000000-0000-0000-0000-000000000002",
 
   // Profiles (A院)
   PROFILE_A_ADMIN: "10000000-0000-0000-0000-000000000001",
@@ -95,7 +100,10 @@ async function main() {
   await prisma.exercise.deleteMany();
   await prisma.profile.deleteMany();
   await prisma.tenantSetting.deleteMany();
+  await prisma.passwordResetToken.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
+  await prisma.superAdmin.deleteMany();
   console.log("✅ リセット完了\n");
 
   // ────────────────────────────────────────────────────────────
@@ -208,6 +216,38 @@ async function main() {
 
   console.log("  ✅ A院: 院長・スタッフ 2名");
   console.log("  ✅ B院: 院長 1名\n");
+
+  // ────────────────────────────────────────────────────────────
+  // 3b. 認証ユーザー作成（bcrypt ハッシュ化）
+  // ────────────────────────────────────────────────────────────
+  console.log("🔐 認証ユーザー作成中...");
+
+  const [hashA, hashB] = await Promise.all([
+    bcrypt.hash("password123", 12),
+    bcrypt.hash("password123", 12),
+  ]);
+
+  await prisma.user.createMany({
+    data: [
+      {
+        id:       IDS.USER_A,
+        tenantId: IDS.TENANT_A,
+        loginId:  "yamada-admin",
+        email:    "yamada.admin@example.com",
+        password: hashA,
+      },
+      {
+        id:       IDS.USER_B,
+        tenantId: IDS.TENANT_B,
+        loginId:  "sakura-admin",
+        email:    "sakura.admin@example.com",
+        password: hashB,
+      },
+    ],
+  });
+
+  console.log("  ✅ A院: loginId=yamada-admin / pass=password123");
+  console.log("  ✅ B院: loginId=sakura-admin / pass=password123\n");
 
   // ────────────────────────────────────────────────────────────
   // 4. 患者データ
@@ -397,6 +437,36 @@ async function main() {
   console.log("📋 予約ログ: 3件記録\n");
 
   // ────────────────────────────────────────────────────────────
+  // 6b. 営業時間設定（BusinessHour）
+  // ────────────────────────────────────────────────────────────
+  console.log("🕐 営業時間設定中...");
+
+  // A院: 月〜土営業（09:00-20:00）、日曜定休
+  // B院: 月〜金営業（09:00-18:00）、土日定休
+  const businessHoursData = [
+    // A院
+    { tenantId: IDS.TENANT_A, dayOfWeek: 0, isOpen: false, openTime: "09:00", closeTime: "20:00" }, // 日
+    { tenantId: IDS.TENANT_A, dayOfWeek: 1, isOpen: true,  openTime: "09:00", closeTime: "20:00" }, // 月
+    { tenantId: IDS.TENANT_A, dayOfWeek: 2, isOpen: true,  openTime: "09:00", closeTime: "20:00" }, // 火
+    { tenantId: IDS.TENANT_A, dayOfWeek: 3, isOpen: true,  openTime: "09:00", closeTime: "20:00" }, // 水
+    { tenantId: IDS.TENANT_A, dayOfWeek: 4, isOpen: true,  openTime: "09:00", closeTime: "20:00" }, // 木
+    { tenantId: IDS.TENANT_A, dayOfWeek: 5, isOpen: true,  openTime: "09:00", closeTime: "20:00" }, // 金
+    { tenantId: IDS.TENANT_A, dayOfWeek: 6, isOpen: true,  openTime: "09:00", closeTime: "17:00" }, // 土
+    // B院
+    { tenantId: IDS.TENANT_B, dayOfWeek: 0, isOpen: false, openTime: "09:00", closeTime: "18:00" }, // 日
+    { tenantId: IDS.TENANT_B, dayOfWeek: 1, isOpen: true,  openTime: "09:00", closeTime: "18:00" }, // 月
+    { tenantId: IDS.TENANT_B, dayOfWeek: 2, isOpen: true,  openTime: "09:00", closeTime: "18:00" }, // 火
+    { tenantId: IDS.TENANT_B, dayOfWeek: 3, isOpen: true,  openTime: "09:00", closeTime: "18:00" }, // 水
+    { tenantId: IDS.TENANT_B, dayOfWeek: 4, isOpen: true,  openTime: "09:00", closeTime: "18:00" }, // 木
+    { tenantId: IDS.TENANT_B, dayOfWeek: 5, isOpen: true,  openTime: "09:00", closeTime: "18:00" }, // 金
+    { tenantId: IDS.TENANT_B, dayOfWeek: 6, isOpen: false, openTime: "09:00", closeTime: "18:00" }, // 土
+  ];
+
+  await prisma.businessHour.createMany({ data: businessHoursData });
+  console.log("  ✅ A院: 月〜土営業 (09:00-20:00、土は17:00まで)");
+  console.log("  ✅ B院: 月〜金営業 (09:00-18:00)\n");
+
+  // ────────────────────────────────────────────────────────────
   // 7. カルテデータ（A院: professional / B院: simple）
   // ────────────────────────────────────────────────────────────
   console.log("📝 カルテデータ作成中...");
@@ -548,11 +618,30 @@ async function main() {
   console.log("  ✅ A院: confirmation 送信済み + reminder_24h + reminder_2h\n");
 
   // ────────────────────────────────────────────────────────────
+  // 9. システム管理者（SuperAdmin）
+  // ────────────────────────────────────────────────────────────
+  console.log("🔐 システム管理者作成中...");
+
+  const superAdminEmail    = process.env.SUPER_ADMIN_EMAIL    ?? "admin@chiro-saas.example";
+  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD ?? "superadmin123";
+  const superAdminHash     = await bcrypt.hash(superAdminPassword, 12);
+
+  await prisma.superAdmin.upsert({
+    where:  { email: superAdminEmail },
+    update: { password: superAdminHash },
+    create: { email: superAdminEmail, password: superAdminHash },
+  });
+
+  console.log(`  ✅ email=${superAdminEmail}\n`);
+
+  // ────────────────────────────────────────────────────────────
   // 完了サマリー
   // ────────────────────────────────────────────────────────────
   const counts = await Promise.all([
     prisma.tenant.count(),
     prisma.tenantSetting.count(),
+    prisma.user.count(),
+    prisma.superAdmin.count(),
     prisma.profile.count(),
     prisma.patient.count(),
     prisma.appointment.count(),
@@ -560,6 +649,7 @@ async function main() {
     prisma.exercise.count(),
     prisma.exerciseRecord.count(),
     prisma.notificationQueue.count(),
+    prisma.businessHour.count(),
   ]);
 
   console.log("═══════════════════════════════════════");
@@ -567,13 +657,21 @@ async function main() {
   console.log("───────────────────────────────────────");
   console.log(`  tenants             : ${counts[0]}件`);
   console.log(`  tenant_settings     : ${counts[1]}件`);
-  console.log(`  profiles            : ${counts[2]}件`);
-  console.log(`  patients            : ${counts[3]}件`);
-  console.log(`  appointments        : ${counts[4]}件`);
-  console.log(`  kartes              : ${counts[5]}件`);
-  console.log(`  exercises           : ${counts[6]}件`);
-  console.log(`  exercise_records    : ${counts[7]}件`);
-  console.log(`  notification_queue  : ${counts[8]}件`);
+  console.log(`  users (auth)        : ${counts[2]}件`);
+  console.log(`  super_admins        : ${counts[3]}件`);
+  console.log(`  profiles            : ${counts[4]}件`);
+  console.log(`  patients            : ${counts[5]}件`);
+  console.log(`  appointments        : ${counts[6]}件`);
+  console.log(`  kartes              : ${counts[7]}件`);
+  console.log(`  exercises           : ${counts[8]}件`);
+  console.log(`  exercise_records    : ${counts[9]}件`);
+  console.log(`  notification_queue  : ${counts[10]}件`);
+  console.log(`  business_hours      : ${counts[11]}件`);
+  console.log("───────────────────────────────────────");
+  console.log("🔑 ログイン情報:");
+  console.log("   A院: yamada-admin / password123");
+  console.log("   B院: sakura-admin / password123");
+  console.log(`   管理者: ${superAdminEmail} / ${superAdminPassword}`);
   console.log("═══════════════════════════════════════");
 }
 
