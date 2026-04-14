@@ -8,10 +8,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Prisma 7: 接続URLは prisma.config.ts で管理する（schema.prismaには記述不要）
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")   // Supabase 接続プール (pgBouncer)
-  directUrl = env("DIRECT_URL")     // Supabase ダイレクト接続 (prisma migrate 用)
+  provider = "postgresql"
 }
 
 // ============================================================
@@ -86,11 +85,21 @@ model Tenant {
   logoUrl     String?    @map("logo_url")
   colorTheme  Json?      @map("color_theme") // {"primary": "#3B82F6", "accent": "#10B981"}
   plan        TenantPlan @default(standard)
-  isActive    Boolean    @default(true) @map("is_active")
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  isActive           Boolean    @default(true) @map("is_active")
+  businessStartTime  String     @default("09:00") @map("business_start_time") @db.VarChar(5)
+  businessEndTime    String     @default("20:00") @map("business_end_time")   @db.VarChar(5)
+  regularHolidays    Int[]      @default([0]) @map("regular_holidays")
+  lunchStartTime     String?    @map("lunch_start_time") @db.VarChar(5)
+  lunchEndTime       String?    @map("lunch_end_time")   @db.VarChar(5)
+  /// 予約グリッドの刻み分数。選択肢: 15 | 20 | 30 | 60
+  slotInterval       Int        @default(30) @map("slot_interval")
+  /// 同一時間帯に受け入れ可能な最大予約数（1 = 同時1人まで）
+  maxCapacity        Int        @default(1)  @map("max_capacity")
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   // Relations
   settings          TenantSetting[]
+  businessHours     BusinessHour[]
   profiles          Profile[]
   patients          Patient[]
   appointments      Appointment[]
@@ -158,6 +167,7 @@ model Patient {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId         String    @map("tenant_id") @db.Uuid
   displayName      String    @map("display_name") @db.VarChar(255)
+  nameKana         String?   @map("name_kana") @db.VarChar(255)   // ふりがな（ひらがな）
   email            String?   @db.VarChar(255)
   phone            String?   @db.VarChar(20)
   birthDate        DateTime? @map("birth_date") @db.Date
@@ -362,4 +372,25 @@ model NotificationQueue {
   @@index([tenantId, scheduledAt, status]) // バッチ処理での未送信キュー取得用
   @@index([appointmentId])
   @@map("notification_queue")
+}
+
+// ============================================================
+// 5. 曜日別営業時間
+// ============================================================
+
+/// 曜日ごとの営業時間設定。
+/// dayOfWeek は JS の getDay() と同じ: 0=日, 1=月, ..., 6=土
+model BusinessHour {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  dayOfWeek Int     @map("day_of_week")
+  isOpen    Boolean @default(true)  @map("is_open")
+  openTime  String  @default("09:00") @map("open_time")  @db.VarChar(5)
+  closeTime String  @default("20:00") @map("close_time") @db.VarChar(5)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dayOfWeek])
+  @@index([tenantId])
+  @@map("business_hours")
 }

@@ -4,6 +4,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   chiro-saas Design Token
+   コンセプト: 「信頼」「清潔」「静謐」
+   Primary  : ソフトブルー  (#3B82F6 系、彩度を落とした落ち着く青)
+   Accent   : ミントグリーン (#10B981 系、CTA・確定状態のみ使用)
+   BG       : オフホワイト  (#F9FAFB)
+   Text     : #111827 (本文) / #6B7280 (補助)
+   Border   : #E5E7EB
+   Radius   : 0.75rem ベース (= rounded-xl)
+   ============================================================ */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -49,72 +60,110 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* --- Base --- */
+  --background: oklch(0.984 0.002 264);    /* #F9FAFB オフホワイト */
+  --foreground: oklch(0.208 0.021 265);    /* #111827 本文テキスト */
+
+  /* --- Card / Popover: 白でBGと対比を出す --- */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.208 0.021 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.208 0.021 265);
+
+  /* --- Primary: ソフトブルー (#3B82F6 系) --- */
+  --primary: oklch(0.60 0.18 260);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
+
+  /* --- Secondary: 薄いブルーグレー --- */
+  --secondary: oklch(0.968 0.007 264);
+  --secondary-foreground: oklch(0.208 0.021 265);
+
+  /* --- Muted --- */
+  --muted: oklch(0.968 0.007 264);
+  --muted-foreground: oklch(0.553 0.013 264); /* #6B7280 補助テキスト */
+
+  /* --- Accent: ミントグリーン (#10B981 系) CTA・確定状態に限定 --- */
+  --accent: oklch(0.69 0.16 162);
+  --accent-foreground: oklch(0.985 0 0);
+
+  /* --- Destructive: 柔らかいレッド (恐怖感を与えない) --- */
+  --destructive: oklch(0.637 0.200 25);
+
+  /* --- Border / Input --- */
+  --border: oklch(0.922 0 0);              /* #E5E7EB */
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --ring: oklch(0.60 0.18 260);            /* フォーカスリングはPrimaryと同色 */
+
+  /* --- Radius: 0.75rem ベース → rounded-xl 基調 --- */
+  --radius: 0.75rem;
+
+  /* --- Charts --- */
+  --chart-1: oklch(0.60 0.18 260);   /* primary blue */
+  --chart-2: oklch(0.69 0.16 162);   /* mint green */
+  --chart-3: oklch(0.75 0.12 220);   /* sky blue */
+  --chart-4: oklch(0.78 0.10 180);   /* teal */
+  --chart-5: oklch(0.82 0.08 240);   /* lavender */
+
+  /* --- Sidebar --- */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.208 0.021 265);
+  --sidebar-primary: oklch(0.60 0.18 260);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-accent: oklch(0.968 0.007 264);
+  --sidebar-accent-foreground: oklch(0.208 0.021 265);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.60 0.18 260);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.145 0.012 265);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --card: oklch(0.200 0.012 265);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.200 0.012 265);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --primary: oklch(0.65 0.18 260);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.269 0.010 265);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --muted: oklch(0.269 0.010 265);
+  --muted-foreground: oklch(0.708 0.013 264);
+  --accent: oklch(0.72 0.16 162);
   --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
+  --destructive: oklch(0.704 0.191 22);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
+  --ring: oklch(0.65 0.18 260);
+  --chart-1: oklch(0.65 0.18 260);
+  --chart-2: oklch(0.72 0.16 162);
+  --chart-3: oklch(0.78 0.12 220);
+  --chart-4: oklch(0.80 0.10 180);
+  --chart-5: oklch(0.84 0.08 240);
+  --sidebar: oklch(0.200 0.012 265);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: oklch(0.65 0.18 260);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: oklch(0.269 0.010 265);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.65 0.18 260);
+}
+
+/* ============================================================
+   ブランドカラー: #91D2D9 (ティールシアン系)
+   CLAUDE.md 規約: 「信頼」「清潔」「静謐」— 医療系 SaaS 専用パレット
+   ============================================================ */
+:root {
+  /* サイドバー・アクティブ要素に使用するティールブランドカラー */
+  --brand:          #91D2D9;   /* メインブランド                  */
+  --brand-dark:     #2B8C96;   /* ホバー・アクティブテキスト       */
+  --brand-darker:   #1a6a72;   /* 強調テキスト                    */
+  --brand-medium:   #5BBAC4;   /* ボタン・インタラクティブ要素      */
+  --brand-light:    #C8EDF0;   /* バッジ・ライトアクセント          */
+  --brand-bg:       #E8F7F8;   /* アクティブ項目の背景             */
+  --brand-hover:    #F0FAFB;   /* ホバー時の背景                  */
+  --brand-border:   #A8DCE2;   /* ブランドボーダー                 */
+  --sidebar-width:  256px;
 }
 
 @layer base {
@@ -122,9 +171,34 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
   html {
     @apply font-sans;
+  }
+
+  /* タップターゲット最小サイズ保証 (Fitts の法則: 44×44px) */
+  button, [role="button"], a, input, select, textarea {
+    @apply min-h-[44px];
+  }
+
+  /* スクロールバー: 主張しすぎない細いデザイン */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+
+  /* テキスト選択色 */
+  ::selection {
+    background-color: oklch(0.60 0.18 260 / 20%);
   }
 }
