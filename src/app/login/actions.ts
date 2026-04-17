@@ -27,12 +27,17 @@ export async function loginAction(
     return { error: "ログインIDとパスワードを入力してください。" };
   }
 
-  const userRecord = await prisma.user.findUnique({
-    where:  { loginId },
-    select: { tenant: { select: { isActive: true } } },
-  });
-  if (userRecord && !userRecord.tenant.isActive) {
-    return { error: "このアカウントは現在無効化されています。管理者にお問い合わせください。" };
+  try {
+    const userRecord = await prisma.user.findUnique({
+      where:  { loginId },
+      select: { tenant: { select: { isActive: true } } },
+    });
+    if (userRecord && !userRecord.tenant.isActive) {
+      return { error: "このアカウントは現在無効化されています。管理者にお問い合わせください。" };
+    }
+  } catch (dbErr) {
+    console.error("[loginAction] DB接続エラー:", dbErr);
+    return { error: "システムエラーが発生しました。しばらく後にお試しください。" };
   }
 
   try {
@@ -41,7 +46,10 @@ export async function loginAction(
     if (err instanceof AuthError) {
       return { error: "ログインIDまたはパスワードが正しくありません。" };
     }
-    throw err;
+    // NEXT_REDIRECT は再スロー（Server Action リダイレクト）
+    if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) throw err;
+    console.error("[loginAction] signIn エラー:", err);
+    return { error: "認証処理中にエラーが発生しました。しばらく後にお試しください。" };
   }
 
   return { success: true };
