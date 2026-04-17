@@ -12,24 +12,12 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 function buildConnectionString(): string {
-  const directUrl = process.env.DIRECT_URL ?? "";
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  // DATABASE_URL を優先（本番 Vercel）
+  const databaseUrl = process.env.DATABASE_URL ?? "";
+  if (databaseUrl) return databaseUrl;
 
-  // DIRECT_URL がすでに直接接続形式 (db.*.supabase.co) ならそのまま使う
-  if (directUrl.includes(".supabase.co") && !directUrl.includes("pooler")) {
-    return directUrl;
-  }
-
-  // DIRECT_URL がプール形式の場合: project ref + password を抽出して直接接続URLを構築
-  const ref = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
-  const password = directUrl.match(/:\/\/[^:]+:([^@]+)@/)?.[1];
-
-  if (ref && password) {
-    return `postgresql://postgres:${password}@db.${ref}.supabase.co:5432/postgres`;
-  }
-
-  // 本番環境 (Vercel) では DATABASE_URL (pgBouncer) が利用可能
-  return process.env.DATABASE_URL ?? "";
+  // ローカル開発: DIRECT_URL をフォールバック
+  return process.env.DIRECT_URL ?? "";
 }
 
 const prismaClientSingleton = () => {
