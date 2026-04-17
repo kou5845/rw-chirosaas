@@ -21,13 +21,12 @@ function buildDirectUrl(): string {
   const ref = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
   const password = directUrl.match(/:\/\/[^:]+:([^@]+)@/)?.[1];
 
-  if (!ref || !password) {
-    throw new Error(
-      "DIRECT_URL または NEXT_PUBLIC_SUPABASE_URL が正しく設定されていません。"
-    );
+  if (ref && password) {
+    return `postgresql://postgres:${password}@db.${ref}.supabase.co:5432/postgres`;
   }
 
-  return `postgresql://postgres:${password}@db.${ref}.supabase.co:5432/postgres`;
+  // フォールバック: DATABASE_URL (pgBouncer) を使用。prisma generate には接続不要。
+  return process.env.DATABASE_URL ?? directUrl;
 }
 
 const directUrl = buildDirectUrl();
