@@ -32,6 +32,9 @@ function isPublicPath(pathname: string): boolean {
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length >= 2 && segments[1] === "reserve") return true;
 
+  // 患者マイページ: /{tenantSlug}/mypage/* は認証不要（マジックリンク方式）
+  if (segments.length >= 2 && segments[1] === "mypage") return true;
+
   return false;
 }
 

@@ -109,19 +109,23 @@ model Tenant {
   slotInterval       Int        @default(30) @map("slot_interval")
   /// 同一時間帯に受け入れ可能な最大予約数（1 = 同時1人まで）
   maxCapacity        Int        @default(1)  @map("max_capacity")
+  /// トレーニング体組成指標の表示設定 JSON: { weight, bodyFat, bmi, muscleMass, bmr, visceralFat }
+  trainingMetricsConfig Json?   @map("training_metrics_config")
   createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   // Relations
-  user              User?
-  settings          TenantSetting[]
-  businessHours     BusinessHour[]
-  profiles          Profile[]
-  patients          Patient[]
-  appointments      Appointment[]
-  kartes            Karte[]
-  exercises         Exercise[]
-  services          Service[]
-  notificationQueue NotificationQueue[]
+  user               User?
+  settings           TenantSetting[]
+  businessHours      BusinessHour[]
+  profiles           Profile[]
+  staffs             Staff[]
+  patients           Patient[]
+  appointments       Appointment[]
+  kartes             Karte[]
+  exerciseCategories ExerciseCategory[]
+  exercises          Exercise[]
+  services           Service[]
+  notificationQueue  NotificationQueue[]
 
   @@map("tenants")
 }
@@ -203,15 +207,32 @@ model Profile {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // 予約との関連
-  assignedAppointments Appointment[]    @relation("StaffAppointments")
   confirmedAppointments Appointment[]   @relation("ConfirmedByProfile")
   cancelledAppointments Appointment[]   @relation("CancelledByProfile")
   appointmentLogs      AppointmentLog[]
-  kartes               Karte[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("profiles")
+}
+
+/// スタッフ情報。予約の担当者として割り当てるためのマスターデータ。
+/// Profile（ログインユーザーアカウント）とは別に管理する。
+model Staff {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(255)
+  role      String?  @db.VarChar(255) // 役職/肩書き
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  kartes       Karte[]
+
+  @@index([tenantId])
+  @@map("staffs")
 }
 
 // ============================================================
@@ -228,7 +249,9 @@ model Patient {
   phone            String?   @db.VarChar(20)
   birthDate        DateTime? @map("birth_date") @db.Date
   lineUserId       String?   @unique @map("line_user_id") @db.VarChar(64) // LINE ユーザーID
+  accessToken      String?   @unique @map("access_token") @db.Uuid       // マイページ用マジックリンクトークン
   emergencyContact String?   @map("emergency_contact") @db.VarChar(255)
+  heightCm         Float?    @map("height_cm")  // 身長 (cm): BMI 自動計算に使用
   memo             String?   // 院内メモ（患者非表示）
   isActive         Boolean   @default(true) @map("is_active")
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
@@ -277,7 +300,7 @@ model Appointment {
 
   tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   patient         Patient            @relation(fields: [patientId], references: [id])
-  staff           Profile?           @relation("StaffAppointments", fields: [staffId], references: [id])
+  staff           Staff?             @relation(fields: [staffId], references: [id])
   confirmedByUser Profile?           @relation("ConfirmedByProfile", fields: [confirmedBy], references: [id])
   cancelledByUser Profile?           @relation("CancelledByProfile", fields: [cancelledBy], references: [id])
   logs            AppointmentLog[]
@@ -331,12 +354,23 @@ model Karte {
   bodyParts           String[]       @map("body_parts")       // 部位選択（例: ["腰", "首"]）
   treatments          String[]       // 施術内容（例: ["アクチベーター", "指圧"]）
 
+  // 体組成データ（training_record ON の場合、トレーニングカルテで使用）
+  weight      Float?   @map("weight")       // 体重 (kg)
+  bodyFat     Float?   @map("body_fat")     // 体脂肪率 (%)
+  bmi         Float?   @map("bmi")          // BMI
+  muscleMass  Float?   @map("muscle_mass")  // 筋肉量 (kg)
+  bmr         Float?   @map("bmr")          // 基礎代謝 (kcal)
+  visceralFat Float?   @map("visceral_fat") // 内臓脂肪レベル
+
+  // 動的な体組成指標の保存先 (JSON: { "metricId": value })
+  bodyCompValues Json? @map("body_comp_values")
+
   createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
   patient     Patient      @relation(fields: [patientId], references: [id])
-  staff       Profile?     @relation(fields: [staffId], references: [id])
+  staff       Staff?       @relation(fields: [staffId], references: [id])
 
   // professional モードのみ利用する子テーブル
   media           KarteMedia[]
@@ -367,19 +401,40 @@ model KarteMedia {
   @@map("karte_media")
 }
 
+/// トレーニングカテゴリマスタ。ExerciseCategory を DB で管理し、ハードコードを排除する。
+model ExerciseCategory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(64)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  exercises Exercise[]
+
+  @@index([tenantId])
+  @@map("exercise_categories")
+}
+
 /// トレーニング種目マスタ。training_record トグルが有効な場合（A院）に使用。
 /// CLAUDE.md 規約: 一般的な種目をプリセットし、管理画面から tenant_admin が CRUD 操作可能とする。
 model Exercise {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
-  name      String   @db.VarChar(255) // 種目名（例: "スクワット"）
-  category  String?  @db.VarChar(64)  // カテゴリ（例: "下半身", "体幹"）
-  unit      String?  @db.VarChar(32)  // 単位（例: "kg", "回", "秒"）
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  categoryId String?  @map("category_id") @db.Uuid // ExerciseCategory への FK（任意）
+  name       String   @db.VarChar(255) // 種目名（例: "スクワット"）
+  category   String?  @db.VarChar(64)  // カテゴリ名スナップショット（既存互換性のため残す）
+  unit        String?  @db.VarChar(32)  // 単位（例: "kg", "回", "秒"）
+  duration    Int      @default(0)      // 所要時間（分）: お客様の滞在時間
+  intervalMin Int      @default(0) @map("interval_min") // 次予約までの準備時間（分）
+  price       Int      @default(0)      // 料金（円）
+  sortOrder  Int      @default(0) @map("sort_order")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  records ExerciseRecord[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  exerciseCategory ExerciseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  records          ExerciseRecord[]
 
   @@index([tenantId])
   @@map("exercises")
@@ -445,9 +500,11 @@ model Service {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
   name        String   @db.VarChar(255)  // 施術名（例: "整体コース"）
-  duration    Int                         // 所要時間（分）
+  duration    Int                         // 所要時間（分）: お客様の滞在時間
+  intervalMin Int      @default(0) @map("interval_min") // 次予約までの準備時間（分）
   price       Int                         // 料金（円）
   description String?                     // 施術の説明
+  sortOrder   Int      @default(0) @map("sort_order")
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @updatedAt       @map("updated_at") @db.Timestamptz

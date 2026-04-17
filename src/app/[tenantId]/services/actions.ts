@@ -14,6 +14,7 @@ export type ServiceFormState = {
   errors?: {
     name?:        string;
     duration?:    string;
+    intervalMin?: string;
     price?:       string;
     description?: string;
     general?:     string;
@@ -74,6 +75,26 @@ export async function updateService(
   return { success: true };
 }
 
+// ── 有効/停止 トグル ─────────────────────────────────────────
+
+export async function toggleServiceStatus(
+  serviceId:  string,
+  isActive:   boolean,
+  tenantId:   string,
+  tenantSlug: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await prisma.service.updateMany({
+      where: { id: serviceId, tenantId }, // CLAUDE.md 絶対ルール
+      data:  { isActive },
+    });
+  } catch {
+    return { success: false, error: "状態の更新中にエラーが発生しました。" };
+  }
+  revalidatePath(`/${tenantSlug}/services`);
+  return { success: true };
+}
+
 // ── 論理削除（isActive = false）────────────────────────────────
 
 export async function deactivateService(
@@ -112,11 +133,35 @@ export async function reactivateService(
   return { success: true };
 }
 
+// ── 並び替え ─────────────────────────────────────────────────
+
+export async function reorderServices(
+  items:      { id: string; sortOrder: number }[],
+  tenantId:   string,
+  tenantSlug: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await prisma.$transaction(
+      items.map((item) =>
+        prisma.service.updateMany({
+          where: { id: item.id, tenantId }, // CLAUDE.md 絶対ルール
+          data:  { sortOrder: item.sortOrder },
+        })
+      )
+    );
+  } catch {
+    return { success: false, error: "並び替え処理中にエラーが発生しました。" };
+  }
+  revalidatePath(`/${tenantSlug}/services`);
+  return { success: true };
+}
+
 // ── 共通パーサー ─────────────────────────────────────────────
 
 type ParsedData = {
   name:        string;
   duration:    number;
+  intervalMin: number;
   price:       number;
   description: string | null;
 };
@@ -124,10 +169,11 @@ type ParsedData = {
 function parseServiceForm(
   formData: FormData,
 ): { data: ParsedData } | { errors: NonNullable<ServiceFormState>["errors"] } {
-  const name        = (formData.get("name")        as string | null)?.trim() ?? "";
-  const durationStr = (formData.get("duration")    as string | null)?.trim() ?? "";
-  const priceStr    = (formData.get("price")        as string | null)?.trim() ?? "";
-  const description = (formData.get("description") as string | null)?.trim() || null;
+  const name           = (formData.get("name")        as string | null)?.trim() ?? "";
+  const durationStr    = (formData.get("duration")    as string | null)?.trim() ?? "";
+  const intervalStr    = (formData.get("intervalMin") as string | null)?.trim() ?? "";
+  const priceStr       = (formData.get("price")       as string | null)?.trim() ?? "";
+  const description    = (formData.get("description") as string | null)?.trim() || null;
 
   const errors: NonNullable<ServiceFormState>["errors"] = {};
 
@@ -140,11 +186,17 @@ function parseServiceForm(
   else if (duration > 480)
     errors.duration = "所要時間は480分（8時間）以内で入力してください。";
 
+  const intervalMin = intervalStr === "" ? 0 : parseInt(intervalStr, 10);
+  if (isNaN(intervalMin) || intervalMin < 0)
+    errors.intervalMin = "インターバルは0以上の整数で入力してください。";
+  else if (intervalMin > 120)
+    errors.intervalMin = "インターバルは120分以内で入力してください。";
+
   const price = parseInt(priceStr, 10);
   if (!priceStr || isNaN(price) || price < 0)
     errors.price = "料金は0以上の整数で入力してください。";
 
   if (Object.keys(errors).length > 0) return { errors };
 
-  return { data: { name, duration, price, description } };
+  return { data: { name, duration, intervalMin, price, description } };
 }

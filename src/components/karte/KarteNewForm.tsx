@@ -14,13 +14,12 @@ import { useState, useCallback, useEffect } from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Save, FileText, Dumbbell, X, ImageIcon, Video } from "lucide-react";
+import { AlertCircle, Save, FileText, Dumbbell, X, ImageIcon, Video, Scale } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { createKarte, updateKarte } from "@/app/[tenantId]/patients/[patientId]/kartes/actions";
 import {
   BODY_PARTS,
-  TREATMENTS,
   CONDITION_STATUS_OPTIONS,
 } from "@/lib/karte-constants";
 import type { KarteMode } from "@prisma/client";
@@ -34,6 +33,12 @@ import {
   type PreviousRecord,
   type ExerciseRow,
 } from "./TrainingRecordSection";
+import {
+  calcBmi,
+  getEnabledMetrics,
+  getMetricColor,
+  type MetricConfigItem,
+} from "@/lib/training-metrics";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 型定義
@@ -54,6 +59,15 @@ export type KarteInitialValues = {
   bodyParts:       string[];
   treatments:      string[];
   exerciseRows:    ExerciseRow[];
+  // 体組成データ JSON { metricId: value }
+  bodyCompValues?: Record<string, number | null>;
+  karteDateTime?:  string; // ISO string
+};
+
+/** Service マスタの必要フィールド（施術内容選択に使用） */
+export type ServiceMaster = {
+  id:   string;
+  name: string;
 };
 
 export type KarteNewFormProps = {
@@ -64,8 +78,12 @@ export type KarteNewFormProps = {
   karteModeSnapshot: KarteMode;
   isProfessional:    boolean;
   trainingEnabled:   boolean;
+  services:          ServiceMaster[];
   exercises:         ExerciseMaster[];
   previousRecords:   PreviousRecord[];
+  // 体組成設定（training_record ON のテナントで渡す）
+  metricsConfig?:    MetricConfigItem[];
+  patientHeightCm?:  number | null;
   // edit mode
   mode?:             "create" | "edit";
   karteId?:          string;
@@ -241,8 +259,11 @@ export function KarteNewForm({
   karteModeSnapshot,
   isProfessional,
   trainingEnabled,
+  services,
   exercises,
   previousRecords,
+  metricsConfig,
+  patientHeightCm,
   mode = "create",
   karteId,
   initialValues,
@@ -273,6 +294,15 @@ export function KarteNewForm({
   );
 
   // ── Professional モード状態 ────────────────────────────────────
+  const [karteDate, setKarteDate] = useState<string>(() => {
+    if (initialValues?.karteDateTime) {
+      const d = new Date(initialValues.karteDateTime);
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    return "";
+  });
+
   const [conditionStatus, setConditionStatus] = useState<string>(
     initialValues?.conditionStatus ?? ""
   );
@@ -287,6 +317,37 @@ export function KarteNewForm({
   const [exerciseRows, setExerciseRows] = useState<ExerciseRow[]>(
     initialValues?.exerciseRows ?? []
   );
+
+  // ── 体組成フィールド（トレーニングカルテ用）────────────────────
+  const [bodyComp, setBodyComp] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    if (initialValues?.bodyCompValues) {
+      for (const [k, v] of Object.entries(initialValues.bodyCompValues)) {
+        init[k] = v != null ? String(v) : "";
+      }
+    }
+    return init;
+  });
+
+  // BMI 自動計算（体重変更時）
+  const enabledMetrics = metricsConfig ? getEnabledMetrics(metricsConfig) : [];
+  const bmiEnabled     = enabledMetrics.some(m => m.id === "bmi");
+
+  function handleBodyCompChange(key: string, raw: string) {
+    setBodyComp((prev) => {
+      const next = { ...prev, [key]: raw };
+      // 体重変更かつ身長がある場合 BMI 自動計算
+      if (key === "weight" && bmiEnabled && patientHeightCm) {
+        const w = parseFloat(raw);
+        if (!isNaN(w) && w > 0) {
+          next.bmi = String(calcBmi(w, patientHeightCm));
+        } else {
+          next.bmi = "";
+        }
+      }
+      return next;
+    });
+  }
 
   // ── 新規メディア ──────────────────────────────────────────────
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
@@ -333,6 +394,15 @@ export function KarteNewForm({
     }))
   );
 
+  const bodyCompValuesObj: Record<string, number> = {};
+  for (const [k, v] of Object.entries(bodyComp)) {
+    if (v !== "") {
+      const num = parseFloat(v);
+      if (!isNaN(num)) bodyCompValuesObj[k] = num;
+    }
+  }
+  const bodyCompValuesJson = JSON.stringify(bodyCompValuesObj);
+
   const mediaJson = JSON.stringify(
     uploadedMedia.map((m) => ({
       storagePath: m.storagePath,
@@ -356,6 +426,7 @@ export function KarteNewForm({
       <input type="hidden" name="karteType"           value={karteType} />
       <input type="hidden" name="conditionStatus"     value={conditionStatus} />
       <input type="hidden" name="exerciseRecordsJson" value={exerciseRecordsJson} />
+      <input type="hidden" name="bodyCompValuesJson"  value={bodyCompValuesJson} />
       <input type="hidden" name="mediaJson"           value={mediaJson} />
       <input type="hidden" name="deleteMediaIdsJson"  value={deleteMediaIdsJson} />
       {mode === "edit" && karteId && (
@@ -367,14 +438,6 @@ export function KarteNewForm({
       {Array.from(selectedTreatments).map((t) => (
         <input key={t} type="hidden" name="treatments" value={t} />
       ))}
-
-      {/* ── エラーバナー ── */}
-      {errorMsg && (
-        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" />
-          {errorMsg}
-        </div>
-      )}
 
       {/* ── カルテ種別タブ（Professional + training_record ON のみ）── */}
       {isProfessional && trainingEnabled && mode === "create" && (
@@ -399,6 +462,19 @@ export function KarteNewForm({
             </button>
           ))}
         </div>
+      )}
+
+      {/* ── 記録日時 (編集モードのみ) ── */}
+      {mode === "edit" && (
+        <SectionCard title="記録日時">
+          <input
+            type="datetime-local"
+            name="karteDateTime"
+            value={karteDate}
+            onChange={(e) => setKarteDate(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-gray-700 outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
+          />
+        </SectionCard>
       )}
 
       {/* ══ 施術カルテ コンテンツ ══ */}
@@ -467,31 +543,33 @@ export function KarteNewForm({
                   })}
                 </div>
               </SectionCard>
-
-              {/* 4. 施術内容 */}
-              <SectionCard
-                title={selectedTreatments.size > 0
-                  ? `施術内容（${selectedTreatments.size}項目選択中）`
-                  : "施術内容"}
-              >
-                <div className="flex flex-wrap gap-2">
-                  {TREATMENTS.map((t) => {
-                    const active = selectedTreatments.has(t);
-                    return (
-                      <button key={t} type="button" onClick={() => toggleTreatment(t)}
-                        className={cn(
-                          "rounded-lg border px-3 py-1.5 text-sm font-medium transition-all active:scale-95",
-                          active
-                            ? "border-indigo-400 bg-indigo-50 text-indigo-700 shadow-sm"
-                            : "border-gray-200 text-gray-600 hover:border-indigo-200 hover:bg-indigo-50/60"
-                        )}>
-                        {t}
-                      </button>
-                    );
-                  })}
-                </div>
-              </SectionCard>
             </>
+          )}
+
+          {/* 4. 施術内容 — Simple / Professional 共通（Service マスタ連動）*/}
+          {services.length > 0 && (
+            <SectionCard
+              title={selectedTreatments.size > 0
+                ? `施術内容（${selectedTreatments.size}項目選択中）`
+                : "施術内容"}
+            >
+              <div className="flex flex-wrap gap-2">
+                {services.map((s) => {
+                  const active = selectedTreatments.has(s.name);
+                  return (
+                    <button key={s.id} type="button" onClick={() => toggleTreatment(s.name)}
+                      className={cn(
+                        "rounded-lg border px-3 py-1.5 text-sm font-medium transition-all active:scale-95",
+                        active
+                          ? "border-indigo-400 bg-indigo-50 text-indigo-700 shadow-sm"
+                          : "border-gray-200 text-gray-600 hover:border-indigo-200 hover:bg-indigo-50/60"
+                      )}>
+                      {s.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </SectionCard>
           )}
 
           {/* 5. 経過・所見 */}
@@ -545,31 +623,86 @@ export function KarteNewForm({
       {/* ══ トレーニングカルテ コンテンツ ══ */}
       {karteType === "TRAINING" && (
         <>
-          {/* トレーニング記録 */}
+          {/* 1. トレーニング記録 */}
+          <TrainingRecordSection
+            exercises={exercises}
+            previousRecords={previousRecords}
+            rows={exerciseRows}
+            onRowsChange={setExerciseRows}
+          />
+
+          {/* 体組成データ入力 */}
           <SectionCard
-            title={exerciseRows.length > 0
-              ? `トレーニング記録（${exerciseRows.length}種目）`
-              : "トレーニング記録"}
+            title="体組成データ"
             badge={
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700">
-                <Dumbbell size={10} className="mr-1 inline" />
-                トレーニング
+                <Scale size={10} className="mr-1 inline" />
+                体組成
               </span>
             }
           >
-            <TrainingRecordSection
-              exercises={exercises}
-              previousRecords={previousRecords}
-              rows={exerciseRows}
-              onRowsChange={setExerciseRows}
-            />
+            {/* BMI 自動計算インフォ */}
+            {bmiEnabled && patientHeightCm && (
+              <p className="mb-4 flex items-center gap-1.5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-bg)] px-3.5 py-2.5 text-xs text-[var(--brand-dark)]">
+                <Scale size={12} className="shrink-0" />
+                体重を入力すると BMI が自動計算されます（身長: {patientHeightCm} cm）
+              </p>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {enabledMetrics.map((meta, i) => {
+                const key     = meta.id;
+                const isBmi   = key === "bmi";
+                const isAuto  = isBmi && !!patientHeightCm && bmiEnabled;
+                const color   = getMetricColor(key, i);
+                return (
+                  <div key={key}>
+                    <label
+                      htmlFor={`bc-${key}`}
+                      className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-gray-600"
+                    >
+                      <span
+                        className="inline-block h-2 w-2 rounded-full"
+                        style={{ backgroundColor: color }}
+                      />
+                      {meta.label}
+                      {meta.unit && (
+                        <span className="font-normal text-gray-400">({meta.unit})</span>
+                      )}
+                      <span className="ml-auto text-[10px] font-normal text-gray-300">任意</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        id={`bc-${key}`}
+                        type="number"
+                        step="any"
+                        value={bodyComp[key] || ""}
+                        onChange={(e) => handleBodyCompChange(key, e.target.value)}
+                        readOnly={isAuto && (bodyComp.weight || "") !== ""}
+                        placeholder={isAuto ? "体重入力で自動計算" : `例: 10`}
+                        className={cn(
+                          "h-10 w-full rounded-xl border border-gray-200 px-3.5 pr-10 text-sm text-gray-700",
+                          "focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/20",
+                          isAuto && (bodyComp.weight || "") !== "" && "bg-[var(--brand-bg)] text-[var(--brand-dark)]",
+                        )}
+                      />
+                      {meta.unit && (
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                          {meta.unit}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </SectionCard>
 
           {/* メモ */}
           <SectionCard title="トレーニングメモ">
             <Textarea
               name="progressNote"
-              placeholder="本日のコンディション、フォーム確認事項、次回の目標など"
+              placeholder="本日のコンディション、体の変化、次回の目標など"
               rows={3}
               defaultValue={initialValues?.progressNote ?? ""}
               className="resize-none rounded-xl border-gray-200 text-sm focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
@@ -612,15 +745,25 @@ export function KarteNewForm({
       )}
 
       {/* ══ フッター ══ */}
-      <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm">
-        <button
-          type="button"
-          onClick={() => mode === "edit" ? onSuccess?.() : router.back()}
-          className="rounded-xl px-4 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100"
-        >
-          キャンセル
-        </button>
-        <SubmitButton label={submitLabel} />
+      <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4">
+          <button
+            type="button"
+            onClick={() => mode === "edit" ? onSuccess?.() : router.back()}
+            className="rounded-xl px-4 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100"
+          >
+            キャンセル
+          </button>
+          <SubmitButton label={submitLabel} />
+        </div>
+        {errorMsg && (
+          <div className="px-6 pb-5">
+            <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle size={15} className="mt-0.5 shrink-0" />
+              {errorMsg}
+            </div>
+          </div>
+        )}
       </div>
     </form>
   );

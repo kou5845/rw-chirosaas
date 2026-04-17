@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 院の基本設定フォーム — 曜日別営業時間 + 昼休み
+ * 院の営業時間フォーム — 曜日別営業時間 + 昼休み
  *
  * CLAUDE.md 規約:
  *   - モバイルファースト・44px タップターゲット保証
@@ -67,7 +67,14 @@ function buildBhMap(businessHours: BusinessHourData[]): Map<number, BusinessHour
   return map;
 }
 
-export function SettingsForm({ tenantSlug, businessHours, lunchStartTime, lunchEndTime, slotInterval, maxCapacity }: Props) {
+export function BusinessHoursForm({
+  tenantSlug,
+  businessHours,
+  lunchStartTime,
+  lunchEndTime,
+  slotInterval,
+  maxCapacity,
+}: Props) {
   const [state, action, isPending] = useActionState<SettingsState, FormData>(
     updateTenantSettings,
     null
@@ -75,7 +82,6 @@ export function SettingsForm({ tenantSlug, businessHours, lunchStartTime, lunchE
 
   const bhMap = buildBhMap(businessHours);
 
-  // 曜日ごとの営業フラグ（チェックボックス制御）
   const [openMap, setOpenMap] = useState<Record<number, boolean>>(() =>
     Object.fromEntries(DAY_ORDER.map((d) => [d, bhMap.get(d)!.isOpen]))
   );
@@ -85,8 +91,11 @@ export function SettingsForm({ tenantSlug, businessHours, lunchStartTime, lunchE
   const errors = state?.errors;
 
   return (
-    <form action={action} className="px-6 py-5 space-y-6">
-      <input type="hidden" name="tenantSlug" value={tenantSlug} />
+    <form action={action} className="space-y-6">
+      {/* hidden: slotInterval / maxCapacity を引き継ぎ送信してアクションを壊さない */}
+      <input type="hidden" name="tenantSlug"    value={tenantSlug} />
+      <input type="hidden" name="slotInterval"  value={slotInterval} />
+      <input type="hidden" name="maxCapacity"   value={maxCapacity} />
 
       {/* 全体エラー */}
       {errors?.general && (
@@ -247,61 +256,6 @@ export function SettingsForm({ tenantSlug, businessHours, lunchStartTime, lunchE
             {errors.lunch}
           </p>
         )}
-      </div>
-
-      {/* ── 予約スロット設定 ── */}
-      <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-          予約スロット設定
-        </p>
-        <div className="overflow-hidden rounded-xl border border-gray-100">
-          {/* slotInterval */}
-          <div
-            className="grid items-center gap-4 border-b border-gray-50 px-4 py-3"
-            style={{ gridTemplateColumns: "1fr 1fr" }}
-          >
-            <div>
-              <p className="text-sm font-medium text-gray-700">スロット間隔</p>
-              <p className="mt-0.5 text-xs text-gray-400">カレンダーの時間刻み幅</p>
-            </div>
-            <select
-              name="slotInterval"
-              defaultValue={slotInterval}
-              className={selectCls}
-            >
-              <option value={15}>15分</option>
-              <option value={20}>20分</option>
-              <option value={30}>30分</option>
-              <option value={60}>60分</option>
-            </select>
-          </div>
-
-          {/* maxCapacity */}
-          <div
-            className="grid items-center gap-4 px-4 py-3"
-            style={{ gridTemplateColumns: "1fr 1fr" }}
-          >
-            <div>
-              <p className="text-sm font-medium text-gray-700">同時予約上限</p>
-              <p className="mt-0.5 text-xs text-gray-400">同一時間帯の受入最大数</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                name="maxCapacity"
-                type="number"
-                min={1}
-                max={10}
-                defaultValue={maxCapacity}
-                className={
-                  "block w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-800 " +
-                  "hover:border-[var(--brand-border)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)] " +
-                  "focus:border-transparent transition-colors"
-                }
-              />
-              <span className="shrink-0 text-sm text-gray-400">名</span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* ── 保存ボタン ── */}

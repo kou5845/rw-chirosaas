@@ -12,6 +12,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Upload, X, ImageIcon, Video, AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createSupabasePublic, KARTE_MEDIA_BUCKET } from "@/lib/supabase";
 
 export type UploadedMedia = {
   /** アップロード前の一意ID（UI用） */
@@ -25,10 +26,11 @@ export type UploadedMedia = {
 };
 
 type UploadingItem = {
-  tempId:   string;
-  file:     File;
-  progress: "uploading" | "error";
-  error?:   string;
+  tempId:     string;
+  file:       File;
+  progress:   "uploading" | "error";
+  statusText?: string;
+  error?:     string;
   previewUrl: string;
 };
 
@@ -37,8 +39,66 @@ type Props = {
   onChange: (media: UploadedMedia[]) => void;
 };
 
-const MAX_SIZE_MB  = 50;
-const ACCEPT_TYPES = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime";
+const MAX_VIDEO_MB = 15;
+const MAX_IMAGE_MB = 2;
+const ACCEPT_TYPES = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,image/heic,image/heif,.heic,.heif";
+
+// ── 画像リサイズユーティリティ ──────────────────────────────────────────
+async function resizeImageAsync(file: File, maxWidth: number, quality: number): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      
+      if (!ctx) {
+        // コンテキスト取得失敗時は元のファイルをフォールバックとして返す
+        resolve(file);
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          // 拡張子を.jpgに置換
+          const newName = file.name.replace(/\.[^/.]+$/, ".jpg");
+          const resizedFile = new File([blob], newName, {
+            type: "image/jpeg",
+            lastModified: Date.now(),
+          });
+          resolve(resizedFile);
+        },
+        "image/jpeg",
+        quality
+      );
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file); // エラー時は元のファイルを返す
+    };
+    
+    img.src = objectUrl;
+  });
+}
 
 export function MediaUploadSection({ tenantId, onChange }: Props) {
   const [uploaded,   setUploaded]   = useState<UploadedMedia[]>([]);
@@ -59,57 +119,105 @@ export function MediaUploadSection({ tenantId, onChange }: Props) {
   }, []);
 
   const uploadFile = useCallback(async (file: File) => {
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      return { error: `${file.name}: ファイルサイズが50MBを超えています` };
-    }
-
-    const tempId     = crypto.randomUUID();
-    const previewUrl = URL.createObjectURL(file);
-
+    const tempId = crypto.randomUUID();
+    let previewUrl = URL.createObjectURL(file); // 一時的なプレビューURL
+    
+    // UI反映
     setUploading((prev) => [...prev, { tempId, file, progress: "uploading", previewUrl }]);
 
-    try {
-      const fd = new FormData();
-      fd.append("file",     file);
-      fd.append("tenantId", tenantId);
+    // ── 画像リサイズ処理・HEIC変換 ──
+    const isVideo = file.type.startsWith("video/");
+    let targetFile = file;
 
-      const res  = await fetch("/api/upload/karte-media", { method: "POST", body: fd });
-      
-      let json;
-      const text = await res.text();
+    const isHeic = file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif") || file.type === "image/heic" || file.type === "image/heif";
+    
+    if (isHeic) {
       try {
-        json = JSON.parse(text);
-      } catch {
-        // JSONパースに失敗した場合は text をそのままエラーとして扱う
-        console.error("Non-JSON response from upload API:", text);
-        setUploading((prev) =>
-          prev.map((u) => u.tempId === tempId ? { ...u, progress: "error", error: `サーバーエラー (${res.status}): ${text.substring(0, 50)}...` } : u)
-        );
+        setUploading((prev) => prev.map((u) => u.tempId === tempId ? { ...u, statusText: "HEIC変換中..." } : u));
+        const heic2any = (await import("heic2any")).default;
+        const convertedBlob = await heic2any({
+          blob: file,
+          toType: "image/jpeg",
+          quality: 0.8,
+        });
+        const blobArray = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+        const newName = file.name.replace(/\.[^/.]+$/, ".jpg");
+        targetFile = new File([blobArray], newName, { type: "image/jpeg", lastModified: Date.now() });
+      } catch (e) {
+        console.warn("HEIC conversion failed:", e);
+        setUploading((prev) => prev.map((u) => u.tempId === tempId ? { ...u, progress: "error", error: "HEIC変換に失敗しました", statusText: undefined } : u));
         return;
       }
+    }
+    
+    if (!isVideo) {
+      try {
+        setUploading((prev) => prev.map((u) => u.tempId === tempId ? { ...u, statusText: "リサイズ中..." } : u));
+        targetFile = await resizeImageAsync(targetFile, 2000, 0.8);
+        // リサイズ後のプレビューURLに差し替え
+        const newPreviewUrl = URL.createObjectURL(targetFile);
+        setUploading((prev) => prev.map((u) => u.tempId === tempId ? { ...u, previewUrl: newPreviewUrl, statusText: "アップロード中..." } : u));
+        URL.revokeObjectURL(previewUrl);
+        previewUrl = newPreviewUrl;
+      } catch (e) {
+        console.warn("Resize failed:", e);
+      }
+    } else {
+      setUploading((prev) => prev.map((u) => u.tempId === tempId ? { ...u, statusText: "アップロード中..." } : u));
+    }
 
-      if (!res.ok) {
-        setUploading((prev) =>
-          prev.map((u) => u.tempId === tempId ? { ...u, progress: "error", error: json?.error || `HTTP ${res.status}` } : u)
-        );
-        return;
-      }
+    // ── サイズ制限バリデーション ──
+    const maxMb = isVideo ? MAX_VIDEO_MB : MAX_IMAGE_MB;
+    if (targetFile.size > maxMb * 1024 * 1024) {
+      setUploading((prev) =>
+        prev.map((u) => u.tempId === tempId ? { ...u, progress: "error", error: `${isVideo ? "動画" : "リサイズ後画像"}サイズが${maxMb}MBを超えています` } : u)
+      );
+      return;
+    }
+
+    try {
+      // 1. API Route に署名付きURLの作成をリクエスト
+      const reqBody = {
+        fileName: targetFile.name,
+        fileType: targetFile.type,
+        fileSize: targetFile.size,
+        tenantId,
+      };
+
+      const res = await fetch("/api/upload/karte-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      });
+      
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+
+      const { storagePath, token } = json;
+
+      // 2. 署名付きURLを用いて Supabase Storage に直接アップロード
+      const supabase = createSupabasePublic();
+      const { error: uploadError } = await supabase.storage
+        .from(KARTE_MEDIA_BUCKET)
+        .uploadToSignedUrl(storagePath, token, targetFile);
+
+      if (uploadError) throw new Error("アップロードに失敗しました: " + uploadError.message);
 
       const media: UploadedMedia = {
         tempId,
-        storagePath: json.storagePath,
-        mediaType:   json.mediaType,
-        fileName:    json.fileName,
-        fileSizeKb:  json.fileSizeKb,
+        storagePath,
+        mediaType:   isVideo ? "video" : "image",
+        fileName:    targetFile.name,
+        fileSizeKb:  Math.ceil(targetFile.size / 1024),
         previewUrl,
       };
 
       setUploading((prev) => prev.filter((u) => u.tempId !== tempId));
       setUploaded((prev) => [...prev, media]);
-    } catch (e) {
+    } catch (e: any) {
       console.error("[uploadFile] fetch error:", e);
       setUploading((prev) =>
-        prev.map((u) => u.tempId === tempId ? { ...u, progress: "error", error: "通信エラーが発生しました" } : u)
+        prev.map((u) => u.tempId === tempId ? { ...u, progress: "error", error: e.message || "通信エラーが発生しました" } : u)
       );
     }
   }, [tenantId]);
@@ -168,7 +276,7 @@ export function MediaUploadSection({ tenantId, onChange }: Props) {
             {isDragOver ? "ここにドロップしてアップロード" : "クリックまたはドラッグ＆ドロップ"}
           </p>
           <p className="mt-0.5 text-xs text-gray-400">
-            JPEG / PNG / GIF / WebP / MP4 / WebM / MOV（最大50MB）
+            JPEG/PNG/HEIC（最大2MB）、MP4/MOV（最大15MB）
           </p>
         </div>
         <input
@@ -203,10 +311,11 @@ export function MediaUploadSection({ tenantId, onChange }: Props) {
             <MediaPreviewCard
               key={item.tempId}
               previewUrl={item.previewUrl}
-              mediaType={item.file.type.startsWith("video/") ? "video" : "image"}
+              mediaType={item.file.name.toLowerCase().endsWith(".heic") ? "image" : item.file.type.startsWith("video/") ? "video" : "image"}
               fileName={item.file.name}
               fileSizeKb={Math.ceil(item.file.size / 1024)}
               status={item.progress}
+              statusText={item.statusText}
               errorMsg={item.error}
               onRemove={() => removeUploading(item.tempId)}
             />
@@ -232,13 +341,14 @@ export function MediaUploadSection({ tenantId, onChange }: Props) {
 
 function MediaPreviewCard({
   previewUrl, mediaType, fileName, fileSizeKb,
-  status, errorMsg, onRemove,
+  status, statusText, errorMsg, onRemove,
 }: {
   previewUrl: string;
   mediaType:  "image" | "video";
   fileName:   string;
   fileSizeKb: number;
   status:     "done" | "uploading" | "error";
+  statusText?: string;
   errorMsg?:  string;
   onRemove:   () => void;
 }) {
@@ -267,8 +377,13 @@ function MediaPreviewCard({
 
         {/* アップロード中オーバーレイ */}
         {status === "uploading" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/50 backdrop-blur-[1px]">
             <Loader2 size={24} className="animate-spin text-white" />
+            {statusText && (
+              <span className="text-[10px] font-medium tracking-wide text-white drop-shadow-md">
+                {statusText}
+              </span>
+            )}
           </div>
         )}
 

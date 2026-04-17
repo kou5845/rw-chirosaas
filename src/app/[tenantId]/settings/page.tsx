@@ -1,21 +1,30 @@
 /**
- * 院の基本設定ページ
+ * 院の基本設定ページ — Vertical Tabs 2カラム構成
  *
  * CLAUDE.md 規約:
  *   - 全 Prisma クエリに tenantId を含めること（絶対ルール）
  *   - tenantId はセッション由来の値のみ使用
  */
 
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { Settings, Info, Clock, Coffee, UserCog, MessageCircle, Bell, MapPin, QrCode } from "lucide-react";
+import {
+  Clock, CalendarClock, Link2, LayoutGrid, QrCode, UserCog, Users,
+} from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { SettingsForm, type BusinessHourData } from "./SettingsForm";
+import { BusinessHoursForm, type BusinessHourData } from "./BusinessHoursForm";
+import { ReservationSlotsForm } from "./ReservationSlotsForm";
 import { UserCredentialsForm } from "./UserCredentialsForm";
 import { LineSettingsForm } from "./LineSettingsForm";
 import { NotificationSettingsForm } from "./NotificationSettingsForm";
 import { ClinicInfoForm } from "./ClinicInfoForm";
 import { ReservationLinkCard } from "./ReservationLinkCard";
+import { TrainingMetricsForm } from "./TrainingMetricsForm";
+import { parseMetricsConfig } from "@/lib/training-metrics";
+import { StaffManagementForm } from "./StaffManagementForm";
+import { SettingsTabsClient, type TabId } from "./SettingsTabsClient";
+import type { ReactNode } from "react";
 
 type Props = {
   params: Promise<{ tenantId: string }>;
@@ -43,9 +52,26 @@ export default async function SettingsPage({ params }: Props) {
       emailEnabled:           true,
       phone:                  true,
       address:                true,
+      trainingMetricsConfig:  true,
     },
   });
   if (!tenant) notFound();
+
+  // トレーニング記録フィーチャートグルを確認
+  const karteFeature = await prisma.tenantSetting.findUnique({
+    where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" } },
+    select: { featureValue: true },
+  });
+  const isProfessional = karteFeature?.featureValue === "professional";
+
+  const trainingFeature = await prisma.tenantSetting.findUnique({
+    where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "training_record" } },
+    select: { featureValue: true },
+  });
+  const trainingEnabled = trainingFeature?.featureValue === "true";
+
+  const staffs = isProfessional ? await prisma.staff.findMany({ where: { tenantId: tenant.id, isActive: true }, orderBy: { name: "asc" } }) : [];
+  const metricsConfig   = parseMetricsConfig(tenant.trainingMetricsConfig);
 
   // 曜日別営業時間（全7曜日）
   const rawHours = await prisma.businessHour.findMany({
@@ -64,174 +90,224 @@ export default async function SettingsPage({ params }: Props) {
       })
     : null;
 
+  // 予約URL
+  const appUrl        = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const reservationUrl = `${appUrl}/${slug}/reserve`;
+
+  // ── タブ定義 ──
+  const tabs: { id: TabId; label: string; icon: ReactNode }[] = [
+    { id: "basic",       label: "基本情報",   icon: <Clock size={15} /> },
+    { id: "reservation", label: "予約設定",   icon: <CalendarClock size={15} /> },
+    { id: "external",    label: "外部連携",   icon: <Link2 size={15} /> },
+    { id: "display",     label: "表示カスタム", icon: <LayoutGrid size={15} /> },
+    // isProfessional が有効な場合のみ追加されるため下で条件判定
+    ...(isProfessional ? [{ id: "staff" as TabId, label: "スタッフ管理", icon: <Users size={15} /> }] : []),
+    { id: "patients",    label: "集患ツール",  icon: <QrCode size={15} /> },
+    { id: "account",     label: "アカウント",  icon: <UserCog size={15} /> },
+  ];
+
+  // ── タブコンテンツ ──
+  const panels: Record<TabId, ReactNode> = {
+    // ── 基本情報タブ ──
+    basic: (
+      <div className="space-y-8">
+        <section>
+          <SectionHeader
+            title="営業時間・昼休み"
+            description="週間カレンダーの表示範囲に反映されます"
+          />
+          <div className="mt-4">
+            <BusinessHoursForm
+              key={JSON.stringify(businessHours) + tenant.lunchStartTime + tenant.lunchEndTime}
+              tenantSlug={slug}
+              businessHours={businessHours}
+              lunchStartTime={tenant.lunchStartTime}
+              lunchEndTime={tenant.lunchEndTime}
+              slotInterval={tenant.slotInterval}
+              maxCapacity={tenant.maxCapacity}
+            />
+          </div>
+        </section>
+
+        <div className="border-t border-gray-100" />
+
+        <section>
+          <SectionHeader
+            title="電話番号・住所"
+            description="メール・LINE通知の本文と、公開予約フォームの完了画面に表示されます"
+          />
+          <div className="mt-4">
+            <ClinicInfoForm
+              tenantSlug={slug}
+              phone={tenant.phone}
+              address={tenant.address}
+            />
+          </div>
+        </section>
+      </div>
+    ),
+
+    // ── 予約設定タブ ──
+    reservation: (
+      <div className="space-y-2">
+        <SectionHeader
+          title="予約スロット設定"
+          description="スロット間隔・同時予約上限・インターバルを設定します"
+        />
+        <div className="mt-4">
+          <ReservationSlotsForm
+            tenantSlug={slug}
+            slotInterval={tenant.slotInterval}
+            maxCapacity={tenant.maxCapacity}
+            businessHours={businessHours}
+            lunchStartTime={tenant.lunchStartTime}
+            lunchEndTime={tenant.lunchEndTime}
+          />
+        </div>
+      </div>
+    ),
+
+    // ── 外部連携タブ ──
+    external: (
+      <div className="space-y-8">
+        <section>
+          <SectionHeader
+            title="LINE 連携設定"
+            description="予約通知・リマインダーをLINEで送信するための設定"
+          />
+          <div className="mt-4">
+            <LineSettingsForm
+              tenantSlug={slug}
+              tenantId={tenant.id}
+              lineChannelSecret={tenant.lineChannelSecret}
+              lineChannelAccessToken={tenant.lineChannelAccessToken}
+              lineFriendUrl={tenant.lineFriendUrl}
+            />
+          </div>
+        </section>
+
+        <div className="border-t border-gray-100" />
+
+        <section>
+          <SectionHeader
+            title="通知設定"
+            description="LINE・メールによる患者への通知手段を選択します"
+          />
+          <div className="mt-4">
+            <NotificationSettingsForm
+              tenantSlug={slug}
+              lineEnabled={tenant.lineEnabled}
+              emailEnabled={tenant.emailEnabled}
+            />
+          </div>
+        </section>
+      </div>
+    ),
+
+    // ── スタッフ管理タブ ──
+    staff: isProfessional ? (
+      <div className="space-y-2">
+        <SectionHeader
+          title="スタッフ管理"
+          description="予約メニューで担当枠として指定できるスタッフの一覧を管理します"
+        />
+        <div className="mt-4">
+          <StaffManagementForm tenantId={tenant.id} staffs={staffs} />
+        </div>
+      </div>
+    ) : (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Users size={40} className="mb-3 text-gray-200" />
+        <p className="text-sm font-medium text-gray-400">スタッフ管理は現在無効です</p>
+      </div>
+    ),
+
+    // ── 表示カスタムタブ ──
+    display: trainingEnabled ? (
+      <div className="space-y-2">
+        <SectionHeader
+          title="体組成指標の表示設定"
+          description="トレーニングカルテとグラフに表示する項目を ON/OFF できます"
+        />
+        <div className="mt-4">
+          <TrainingMetricsForm
+            tenantId={tenant.id}
+            tenantSlug={slug}
+            initial={metricsConfig}
+          />
+        </div>
+      </div>
+    ) : (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <LayoutGrid size={40} className="mb-3 text-gray-200" />
+        <p className="text-sm font-medium text-gray-400">
+          表示カスタム設定は現在このテナントでは無効です
+        </p>
+        <p className="mt-1 text-xs text-gray-300">
+          トレーニング記録機能が有効なテナントのみ設定できます
+        </p>
+      </div>
+    ),
+
+    // ── 集患ツールタブ ──
+    patients: (
+      <div className="space-y-2">
+        <SectionHeader
+          title="集患ツール"
+          description="患者向け予約フォームのURLとQRコードを院内掲示やSNSにご活用ください"
+        />
+        <ReservationLinkCard reservationUrl={reservationUrl} />
+      </div>
+    ),
+
+    // ── アカウントタブ ──
+    account: loginId ? (
+      <div className="space-y-2">
+        <SectionHeader
+          title="アカウント情報"
+          description="ログインID・メール・パスワードを変更できます"
+        />
+        <div className="mt-4">
+          <UserCredentialsForm
+            currentLoginId={loginId}
+            currentEmail={user?.email ?? ""}
+          />
+        </div>
+      </div>
+    ) : (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <UserCog size={40} className="mb-3 text-gray-200" />
+        <p className="text-sm font-medium text-gray-400">アカウント情報を取得できませんでした</p>
+      </div>
+    ),
+  };
+
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
 
       {/* ── ページヘッダー ── */}
       <div>
         <h1 className="text-xl font-semibold text-gray-800">設定</h1>
         <p className="mt-0.5 text-sm text-gray-500">
-          院の営業時間・昼休み・アカウント情報を管理します
+          院の営業時間・予約設定・アカウント情報を管理します
         </p>
       </div>
 
-      {/* ── 営業設定カード ── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="border-b border-gray-100 bg-[var(--brand-bg)] px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-white">
-              <Settings size={15} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--brand-darker)]">営業時間・昼休み</p>
-              <p className="text-xs text-[var(--brand-dark)]/70">週間カレンダーの表示範囲に反映されます</p>
-            </div>
-          </div>
-        </div>
-        <SettingsForm
-          key={JSON.stringify(businessHours) + tenant.lunchStartTime + tenant.lunchEndTime + tenant.slotInterval + tenant.maxCapacity}
-          tenantSlug={slug}
-          businessHours={businessHours}
-          lunchStartTime={tenant.lunchStartTime}
-          lunchEndTime={tenant.lunchEndTime}
-          slotInterval={tenant.slotInterval}
-          maxCapacity={tenant.maxCapacity}
-        />
-      </div>
+      {/* ── 2カラム Vertical Tabs ── */}
+      <Suspense fallback={<div className="h-96 animate-pulse rounded-2xl bg-gray-100" />}>
+        <SettingsTabsClient tabs={tabs} panels={panels} />
+      </Suspense>
 
-      {/* ── 基本情報カード ── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="border-b border-gray-100 bg-[var(--brand-bg)] px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-white">
-              <MapPin size={15} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--brand-darker)]">基本情報</p>
-              <p className="text-xs text-[var(--brand-dark)]/70">電話番号・住所を設定します。通知メールや予約完了画面に反映されます</p>
-            </div>
-          </div>
-        </div>
-        <ClinicInfoForm
-          tenantSlug={slug}
-          phone={tenant.phone}
-          address={tenant.address}
-        />
-      </div>
+    </div>
+  );
+}
 
-      {/* ── LINE 連携設定カード ── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="border-b border-gray-100 bg-[var(--brand-bg)] px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-white">
-              <MessageCircle size={15} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--brand-darker)]">LINE 連携設定</p>
-              <p className="text-xs text-[var(--brand-dark)]/70">予約通知・リマインダーをLINEで送信するための設定</p>
-            </div>
-          </div>
-        </div>
-        <LineSettingsForm
-          tenantSlug={slug}
-          tenantId={tenant.id}
-          lineChannelSecret={tenant.lineChannelSecret}
-          lineChannelAccessToken={tenant.lineChannelAccessToken}
-          lineFriendUrl={tenant.lineFriendUrl}
-        />
-      </div>
-
-      {/* ── 宣伝用リンクカード ── */}
-      {(() => {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-        const reservationUrl = `${appUrl}/${slug}/reserve`;
-        return (
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-            <div className="border-b border-gray-100 bg-[var(--brand-bg)] px-6 py-4">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-white">
-                  <QrCode size={15} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-[var(--brand-darker)]">宣伝用リンク</p>
-                  <p className="text-xs text-[var(--brand-dark)]/70">患者向け予約フォームのURLとQRコードを院内掲示やSNSにご活用ください</p>
-                </div>
-              </div>
-            </div>
-            <ReservationLinkCard reservationUrl={reservationUrl} />
-          </div>
-        );
-      })()}
-
-      {/* ── 通知設定カード ── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="border-b border-gray-100 bg-[var(--brand-bg)] px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-white">
-              <Bell size={15} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--brand-darker)]">通知設定</p>
-              <p className="text-xs text-[var(--brand-dark)]/70">LINE・メールによる患者への通知手段を選択します</p>
-            </div>
-          </div>
-        </div>
-        <NotificationSettingsForm
-          tenantSlug={slug}
-          lineEnabled={tenant.lineEnabled}
-          emailEnabled={tenant.emailEnabled}
-        />
-      </div>
-
-      {/* ── アカウント情報カード ── */}
-      {loginId && (
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 bg-[var(--brand-bg)] px-6 py-4">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-white">
-                <UserCog size={15} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-[var(--brand-darker)]">アカウント情報</p>
-                <p className="text-xs text-[var(--brand-dark)]/70">ログインID・メール・パスワードを変更できます</p>
-              </div>
-            </div>
-          </div>
-          <div className="px-6 py-5">
-            <UserCredentialsForm
-              currentLoginId={loginId}
-              currentEmail={user?.email ?? ""}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ── インフォパネル ── */}
-      <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-bg)] p-5">
-        <div className="flex items-start gap-3">
-          <Info size={16} className="mt-0.5 shrink-0 text-[var(--brand-medium)]" />
-          <div className="space-y-2 text-sm text-[var(--brand-dark)]">
-            <p className="font-semibold">設定の反映について</p>
-            <ul className="space-y-1 text-xs text-[var(--brand-dark)]/80 list-disc list-inside">
-              <li>
-                <span className="inline-flex items-center gap-1">
-                  <Clock size={11} />
-                  <strong>営業時間</strong>: 各曜日の開始・終了時間に合わせてカレンダーの表示範囲が変わります
-                </span>
-              </li>
-              <li>
-                <span className="inline-flex items-center gap-1">
-                  <Coffee size={11} />
-                  <strong>昼休み</strong>: 対象時間帯がカレンダー上でグレー表示されます
-                </span>
-              </li>
-              <li>休診に設定した曜日は「定休日」としてグレーで表示されます</li>
-              <li>ログインIDの変更は次回ログイン時から有効になります</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
+// ── セクションヘッダー ────────────────────────────────────────────────
+function SectionHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <div>
+      <p className="text-sm font-semibold text-gray-800">{title}</p>
+      <p className="mt-0.5 text-xs text-gray-400">{description}</p>
     </div>
   );
 }

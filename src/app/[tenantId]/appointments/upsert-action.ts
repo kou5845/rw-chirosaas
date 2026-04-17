@@ -40,13 +40,14 @@ export async function upsertAppointment(
     return { errors: { general: "必要なパラメータが不足しています。" } };
   }
 
-  const dateStr     = (formData.get("date")        as string | null)?.trim() ?? "";
-  const timeStr     = (formData.get("time")        as string | null)?.trim() ?? "";
-  const menuName    = (formData.get("menuName")    as string | null)?.trim() ?? "";
-  const durationRaw = formData.get("durationMin")  as string | null;
-  const priceRaw    = formData.get("price")        as string | null;
-  const staffId     = (formData.get("staffId")     as string | null) || null;
-  const note        = (formData.get("note")        as string | null)?.trim() || null;
+  const dateStr      = (formData.get("date")        as string | null)?.trim() ?? "";
+  const timeStr      = (formData.get("time")        as string | null)?.trim() ?? "";
+  const menuName     = (formData.get("menuName")    as string | null)?.trim() ?? "";
+  const durationRaw  = formData.get("durationMin")  as string | null;
+  const intervalRaw  = formData.get("intervalMin")  as string | null;
+  const priceRaw     = formData.get("price")        as string | null;
+  const staffId      = (formData.get("staffId")     as string | null) || null;
+  const note         = (formData.get("note")        as string | null)?.trim() || null;
 
   // ── バリデーション ──
   const errors: NonNullable<UpsertAppointmentState>["errors"] = {};
@@ -67,11 +68,15 @@ export async function upsertAppointment(
 
   if (Object.keys(errors).length > 0) return { errors };
 
+  // インターバル（準備時間）: endAt = startAt + durationMin + intervalMin
+  const intervalMinRaw = intervalRaw ? parseInt(intervalRaw, 10) : 0;
+  const effectiveInterval = !isNaN(intervalMinRaw) && intervalMinRaw > 0 ? intervalMinRaw : 0;
+
   const startAt = new Date(`${dateStr}T${timeStr}:00+09:00`);
   if (isNaN(startAt.getTime())) {
     return { errors: { date: "日時の形式が正しくありません。" } };
   }
-  const endAt = new Date(startAt.getTime() + durationMin * 60 * 1000);
+  const endAt = new Date(startAt.getTime() + (durationMin + effectiveInterval) * 60 * 1000);
 
   // ── テナント・患者の整合性確認 ──
   const patient = await prisma.patient.findFirst({
@@ -107,7 +112,7 @@ export async function upsertAppointment(
 
   // ── スタッフ確認 ──
   if (staffId) {
-    const staff = await prisma.profile.findFirst({
+    const staff = await prisma.staff.findFirst({
       where:  { id: staffId, tenantId, isActive: true },
       select: { id: true },
     });

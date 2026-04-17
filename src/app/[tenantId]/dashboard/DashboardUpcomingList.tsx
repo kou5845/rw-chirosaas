@@ -13,7 +13,7 @@ import {
   Loader2, AlertCircle,
 } from "lucide-react";
 import type { AppointmentStatus } from "@prisma/client";
-import { NewAppointmentDialog, type EditModeData, type BusinessHourData } from "@/components/appointments/NewAppointmentDialog";
+import { NewAppointmentDialog, type EditModeData, type BusinessHourData, type ServiceItem, type ExerciseItem } from "@/components/appointments/NewAppointmentDialog";
 import { deleteAppointment, bulkDeleteAppointments } from "@/app/[tenantId]/appointments/delete-action";
 import { cn } from "@/lib/utils";
 
@@ -33,14 +33,18 @@ export type DashboardAppointment = {
 };
 
 type Props = {
-  tenantId:       string;
-  tenantSlug:     string;
-  appointments:   DashboardAppointment[];
-  staffList:      Staff[];
-  businessHours:  BusinessHourData[];
-  lunchStartTime: string | null;
-  lunchEndTime:   string | null;
-  slotInterval:   number;
+  tenantId:         string;
+  tenantSlug:       string;
+  appointments:     DashboardAppointment[];
+  staffList:        Staff[];
+  businessHours:    BusinessHourData[];
+  lunchStartTime:   string | null;
+  lunchEndTime:     string | null;
+  slotInterval:     number;
+  services?:        ServiceItem[];
+  exercises?:       ExerciseItem[];
+  isProfessional?:  boolean;
+  trainingEnabled?: boolean;
 };
 
 const STATUS_CONFIG: Record<AppointmentStatus, { label: string; cls: string }> = {
@@ -97,6 +101,10 @@ export function DashboardUpcomingList({
   lunchStartTime,
   lunchEndTime,
   slotInterval,
+  services,
+  exercises,
+  isProfessional,
+  trainingEnabled,
 }: Props) {
   const [appts,          setAppts]         = useState(initialAppointments);
   const [editTarget,     setEditTarget]    = useState<EditModeData | null>(null);
@@ -334,6 +342,10 @@ export function DashboardUpcomingList({
           lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           editMode={editTarget}
+          services={services}
+          exercises={exercises}
+          isProfessional={isProfessional}
+          trainingEnabled={trainingEnabled}
           onClose={() => setEditTarget(null)}
         />
       )}

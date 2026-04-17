@@ -18,9 +18,10 @@ import { useRouter } from "next/navigation";
 import { X, FileText, Dumbbell, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { KarteNewForm, type ExistingMediaItem, type KarteInitialValues } from "@/components/karte/KarteNewForm";
+import { KarteNewForm, type ExistingMediaItem, type KarteInitialValues, type ServiceMaster } from "@/components/karte/KarteNewForm";
 import type { ExerciseMaster, ExerciseRow } from "@/components/karte/TrainingRecordSection";
 import type { ConditionStatus, KarteMode, KarteType } from "@prisma/client";
+import type { MetricConfigItem } from "@/lib/training-metrics";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 型定義
@@ -43,18 +44,31 @@ export type KarteForEdit = {
     durationSec: number | null;
     memo:        string | null;
   }[];
+  createdAt:         Date;
+  // 体組成データ (旧カラム)
+  weight:            number | null;
+  bodyFat:           number | null;
+  bmi:               number | null;
+  muscleMass:        number | null;
+  bmr:               number | null;
+  visceralFat:       number | null;
+  // 体組成データ (新JSON)
+  bodyCompValues: any | null;
 };
 
 type Props = {
-  karte:          KarteForEdit;
-  tenantId:       string;
-  tenantSlug:     string;
-  patientId:      string;
-  patientName:    string;
-  isProfessional: boolean;
+  karte:           KarteForEdit;
+  tenantId:        string;
+  tenantSlug:      string;
+  patientId:       string;
+  patientName:     string;
+  isProfessional:  boolean;
   trainingEnabled: boolean;
-  exercises:      ExerciseMaster[];
-  onClose:        () => void;
+  services:        ServiceMaster[];
+  exercises:       ExerciseMaster[];
+  metricsConfig?:  MetricConfigItem[];
+  patientHeightCm?: number | null;
+  onClose:         () => void;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,7 +83,10 @@ export function KarteEditDialog({
   patientName,
   isProfessional,
   trainingEnabled,
+  services,
   exercises,
+  metricsConfig,
+  patientHeightCm,
   onClose,
 }: Props) {
   const router = useRouter();
@@ -110,9 +127,18 @@ export function KarteEditDialog({
     router.refresh();
   }, [onClose, router]);
 
-  // ── initialValues を KarteNewForm 用に変換 ───────────────────────
+  // 過去互換のため旧固定項目と新JSON項目をマージ
+  const mergedBodyCompValues = { ...(karte.bodyCompValues || {}) };
+  if (karte.weight != null) mergedBodyCompValues.weight = karte.weight;
+  if (karte.bodyFat != null) mergedBodyCompValues.bodyFat = karte.bodyFat;
+  if (karte.bmi != null) mergedBodyCompValues.bmi = karte.bmi;
+  if (karte.muscleMass != null) mergedBodyCompValues.muscleMass = karte.muscleMass;
+  if (karte.bmr != null) mergedBodyCompValues.bmr = karte.bmr;
+  if (karte.visceralFat != null) mergedBodyCompValues.visceralFat = karte.visceralFat;
+
   const initialValues: KarteInitialValues = {
     karteType:       karte.karteType,
+    karteDateTime:   karte.createdAt.toISOString(),
     conditionNote:   karte.conditionNote,
     progressNote:    karte.progressNote,
     conditionStatus: karte.conditionStatus ?? "",
@@ -127,6 +153,8 @@ export function KarteEditDialog({
       durationSec: rec.durationSec != null ? String(rec.durationSec): "",
       memo:        rec.memo ?? "",
     })),
+    // 体組成データ
+    bodyCompValues: mergedBodyCompValues,
   };
 
   const isTraining = karte.karteType === "TRAINING";
@@ -190,8 +218,11 @@ export function KarteEditDialog({
               karteModeSnapshot={karte.karteModeSnapshot}
               isProfessional={isProfessional}
               trainingEnabled={trainingEnabled}
+              services={services}
               exercises={exercises}
               previousRecords={[]}
+              metricsConfig={metricsConfig}
+              patientHeightCm={patientHeightCm}
               mode="edit"
               karteId={karte.id}
               initialValues={initialValues}

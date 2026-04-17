@@ -43,17 +43,26 @@ export async function GET(request: Request) {
     const result = await sendPendingReminders();
 
     const summary = {
-      ok: true,
-      ...result,
-      executedAt: executedAt.toISOString(),
+      ok:          true,
+      processed:   result.processed,
+      sent:        result.sent,
+      failed:      result.failed,
+      skipped:     result.skipped,
+      windowStart: result.windowStart,
+      windowEnd:   result.windowEnd,
+      executedAt:  executedAt.toISOString(),
     };
 
-    console.log("[cron/reminders] 完了:", summary);
+    // route レベルのサマリーログ（reminders.ts 内の詳細ログと分離）
+    console.log("[cron/reminders] 実行完了:", JSON.stringify(summary));
     return Response.json(summary);
 
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[cron/reminders] 予期せぬエラー:", message);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return Response.json(
+      { ok: false, error: message, executedAt: executedAt.toISOString() },
+      { status: 500 }
+    );
   }
 }

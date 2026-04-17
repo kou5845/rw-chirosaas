@@ -23,13 +23,15 @@ export default async function ServicesPage({ params }: Props) {
 
   const services = await prisma.service.findMany({
     where:   { tenantId: tenant.id }, // CLAUDE.md 絶対ルール
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
     select: {
       id:          true,
       name:        true,
       duration:    true,
+      intervalMin: true,
       price:       true,
       description: true,
+      sortOrder:   true,
       isActive:    true,
     },
   });

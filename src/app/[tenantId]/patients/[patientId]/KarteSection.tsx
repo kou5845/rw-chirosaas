@@ -14,16 +14,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   FileText, Dumbbell, Plus, MapPin, CheckSquare, Sparkles, BarChart2,
-  Pencil, Trash2, AlertTriangle, AlertCircle, Loader2,
+  Pencil, Trash2, AlertTriangle, AlertCircle, Loader2, SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDateTimeJa } from "@/lib/format";
 import type { ConditionStatus, KarteMode, KarteType } from "@prisma/client";
-import { TrainingAnalysisTab, type ExerciseChartData } from "./TrainingAnalysisTab";
+import { TrainingAnalysisTab } from "./TrainingAnalysisTab";
+import { BeforeAfterCompareTab, type PhotoForCompare } from "./BeforeAfterCompareTab";
 import { KarteEditDialog, type KarteForEdit } from "./KarteEditDialog";
 import { deleteKarte } from "./kartes/actions";
 import type { ExerciseMaster } from "@/components/karte/TrainingRecordSection";
+import type { ServiceMaster } from "@/components/karte/KarteNewForm";
+import {
+  type MetricConfigItem,
+  type BodyCompDataPoint,
+  getEnabledMetrics,
+  getMetricColor,
+} from "@/lib/training-metrics";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 型定義
@@ -39,7 +47,7 @@ export type KarteForDisplay = {
   bodyParts:          string[];
   treatments:         string[];
   createdAt:          Date;
-  staff:              { displayName: string } | null;
+  staff:              { name: string } | null;
   exerciseRecords: {
     id:          string;
     exerciseId:  string;
@@ -53,20 +61,31 @@ export type KarteForDisplay = {
   media: {
     id:        string;
     mediaType: string;
-    signedUrl: string | null;
   }[];
+  // 体組成データ (旧カラム)
+  weight:         number | null;
+  bodyFat:        number | null;
+  bmi:            number | null;
+  muscleMass:     number | null;
+  bmr:            number | null;
+  visceralFat:    number | null;
+  // 体組成データ (新JSON)
+  bodyCompValues: any | null;
 };
 
 type Props = {
-  kartes:             KarteForDisplay[];
-  isProfessional:     boolean;
-  trainingEnabled:    boolean;
-  slug:               string;
-  patientId:          string;
-  patientName:        string;
-  tenantId:           string;
-  exercises:          ExerciseMaster[];
-  exerciseChartData:  ExerciseChartData[];
+  kartes:          KarteForDisplay[];
+  isProfessional:  boolean;
+  trainingEnabled: boolean;
+  slug:            string;
+  patientId:       string;
+  patientName:     string;
+  tenantId:        string;
+  services:        ServiceMaster[];
+  exercises:       ExerciseMaster[];
+  bodyCompData:    BodyCompDataPoint[];
+  metricsConfig:   MetricConfigItem[];
+  patientHeightCm?: number | null;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,10 +126,10 @@ function KarteModeBadge({ mode }: { mode: KarteMode }) {
 
 export function KarteSection({
   kartes, isProfessional, trainingEnabled, slug, patientId, patientName,
-  tenantId, exercises, exerciseChartData,
+  tenantId, services, exercises, bodyCompData, metricsConfig, patientHeightCm,
 }: Props) {
   const router = useRouter();
-  type Tab = "MEDICAL" | "TRAINING" | "ANALYSIS";
+  type Tab = "MEDICAL" | "TRAINING" | "ANALYSIS" | "COMPARE";
   const [activeTab, setActiveTab] = useState<Tab>("MEDICAL");
 
   // ── 編集・削除ダイアログ制御 ─────────────────────────────────────
@@ -148,6 +167,15 @@ export function KarteSection({
   const trainingKartes = kartes.filter((k) => k.karteType === "TRAINING");
   const displayKartes  = activeTab === "MEDICAL" ? medicalKartes : trainingKartes;
 
+  // 全カルテの写真メディアを収集（professional モード + 画像のみ）
+  const allPhotos: PhotoForCompare[] = isProfessional
+    ? kartes.flatMap((k) =>
+        k.media
+          .filter((m) => m.mediaType !== "video")
+          .map((m) => ({ mediaId: m.id, karteDate: k.createdAt })),
+      )
+    : [];
+
   const tabs: { key: Tab; label: string; icon: React.ElementType; count?: number }[] = [
     { key: "MEDICAL",  label: "施術カルテ",         icon: FileText,  count: medicalKartes.length },
     ...(trainingEnabled
@@ -155,6 +183,9 @@ export function KarteSection({
           { key: "TRAINING" as Tab, label: "トレーニング", icon: Dumbbell,  count: trainingKartes.length },
           { key: "ANALYSIS" as Tab, label: "分析",         icon: BarChart2 },
         ]
+      : []),
+    ...(isProfessional
+      ? [{ key: "COMPARE" as Tab, label: "比較", icon: SlidersHorizontal }]
       : []),
   ];
 
@@ -177,8 +208,8 @@ export function KarteSection({
         </Link>
       </div>
 
-      {/* ── タブバー（施術 / トレーニング / 分析）── */}
-      {trainingEnabled && (
+      {/* ── タブバー（施術 / トレーニング / 分析 / 比較）── */}
+      {(trainingEnabled || isProfessional) && (
         <nav className="flex gap-1 rounded-xl border border-gray-100 bg-gray-50 p-1">
           {tabs.map(({ key, label, icon: Icon, count }) => {
             const active = activeTab === key;
@@ -213,7 +244,10 @@ export function KarteSection({
       {/* ── コンテンツエリア ── */}
       {activeTab === "ANALYSIS" ? (
         /* ── 分析タブ ── */
-        <TrainingAnalysisTab exerciseChartData={exerciseChartData} />
+        <TrainingAnalysisTab bodyCompData={bodyCompData} metricsConfig={metricsConfig} />
+      ) : activeTab === "COMPARE" ? (
+        /* ── Before/After 比較タブ ── */
+        <BeforeAfterCompareTab photos={allPhotos} tenantId={tenantId} />
       ) : displayKartes.length === 0 ? (
         <EmptyKarteState tab={activeTab} slug={slug} patientId={patientId} />
       ) : (
@@ -253,7 +287,7 @@ export function KarteSection({
                   </div>
                   <div className="flex items-center gap-1">
                     {karte.staff && (
-                      <span className="mr-2 text-xs text-gray-500">担当: {karte.staff.displayName}</span>
+                      <span className="mr-2 text-xs text-gray-500">担当: {karte.staff.name}</span>
                     )}
                     {/* 編集ボタン */}
                     <button
@@ -340,6 +374,42 @@ export function KarteSection({
                     </>
                   )}
 
+                  {/* 体組成データ（トレーニングカルテ）*/}
+                  {karte.karteType === "TRAINING" && (() => {
+                    const enabledMetrics = getEnabledMetrics(metricsConfig);
+                    const parsedBcv = karte.bodyCompValues as Record<string, number> | null;
+                    const bodyCompEntries = enabledMetrics
+                      .map((meta, i) => {
+                        const val = parsedBcv?.[meta.id] ?? karte[meta.id as keyof typeof karte] as number | null;
+                        return { key: meta.id, value: val, meta, color: getMetricColor(meta.id, i) };
+                      })
+                      .filter((entry) => entry.value != null);
+
+                    if (bodyCompEntries.length === 0) return null;
+                    return (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {bodyCompEntries.map(({ key, value, meta, color }) => (
+                          <div key={key}
+                            className="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                            <span
+                              className="h-2.5 w-1 shrink-0 rounded-full"
+                              style={{ backgroundColor: color }}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-gray-400 truncate">{meta.label}</p>
+                              <p className="font-mono text-sm font-bold text-gray-800">
+                                {value?.toLocaleString()}
+                                {meta.unit && (
+                                  <span className="ml-0.5 text-[10px] font-normal text-gray-400">{meta.unit}</span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   {/* トレーニング記録 */}
                   {trainingEnabled && karte.exerciseRecords.length > 0 && (
                     <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-bg)]/40 p-4">
@@ -391,24 +461,20 @@ export function KarteSection({
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {karte.media.map((m) => {
-                              if (!m.signedUrl) {
-                                return (
-                                  <span key={m.id} className="flex h-16 w-24 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-xs text-gray-400">
-                                    期限切れ
-                                  </span>
-                                );
-                              }
+                              // /api/media/[mediaId] Route Handler 経由でオンデマンドに署名付きURLを発行
+                              // リクエストのたびに新鮮なURLを取得するため、期限切れが発生しない
+                              const mediaUrl = `/api/media/${m.id}?tenantId=${tenantId}`;
                               return (
                                 <button
                                   key={m.id}
                                   type="button"
-                                  onClick={() => setLightboxMedia({ url: m.signedUrl!, type: m.mediaType })}
+                                  onClick={() => setLightboxMedia({ url: mediaUrl, type: m.mediaType })}
                                   className="group relative h-16 w-24 overflow-hidden rounded-lg border border-gray-200 bg-gray-900 transition-transform hover:scale-105 active:scale-95"
                                 >
                                   {m.mediaType === "video" ? (
                                     <>
                                       <video
-                                        src={`${m.signedUrl}#t=0.1`}
+                                        src={`${mediaUrl}#t=0.1`}
                                         className="h-full w-full object-cover opacity-80"
                                         preload="metadata"
                                       />
@@ -420,7 +486,7 @@ export function KarteSection({
                                     </>
                                   ) : (
                                     <img
-                                      src={m.signedUrl}
+                                      src={mediaUrl}
                                       alt="Karte Media"
                                       loading="lazy"
                                       className="h-full w-full object-cover"
@@ -452,7 +518,10 @@ export function KarteSection({
           patientName={patientName}
           isProfessional={isProfessional}
           trainingEnabled={trainingEnabled}
+          services={services}
           exercises={exercises}
+          metricsConfig={metricsConfig}
+          patientHeightCm={patientHeightCm}
           onClose={() => setEditingKarte(null)}
         />
       )}

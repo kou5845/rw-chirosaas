@@ -22,9 +22,18 @@ export type BusinessHourSummary = {
   isOpen:    boolean;
 };
 
+export type ServiceSummary = {
+  id:          string;
+  name:        string;
+  duration:    number;
+  intervalMin: number;
+  price:       number;
+};
+
 type Props = {
   tenantSlug:    string;
   businessHours: BusinessHourSummary[];
+  services?:     ServiceSummary[];
   phone?:        string | null;
   address?:      string | null;
   lineEnabled?:  boolean;
@@ -112,13 +121,39 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
 
 // ── メインコンポーネント ──────────────────────────────────────────────
 
-export function ReserveForm({ tenantSlug, businessHours, phone, address, lineEnabled, lineFriendUrl }: Props) {
+export function ReserveForm({ tenantSlug, businessHours, services, phone, address, lineEnabled, lineFriendUrl }: Props) {
   const today = new Date();
 
   // ステップ管理
   const [step, setStep]               = useState<1 | 2 | 3 | "done">(1);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
+
+  // メニュー選択（サービスマスタがある場合のみ使用）
+  const hasServices = (services ?? []).length > 0;
+  const [selectedServiceId,   setSelectedServiceId]   = useState<string>("");
+  const [selectedMenuName,    setSelectedMenuName]     = useState<string>("");
+  const [selectedDurationMin, setSelectedDurationMin] = useState<number>(0);
+  const [selectedIntervalMin, setSelectedIntervalMin] = useState<number>(0);
+  const [selectedPrice,       setSelectedPrice]       = useState<number>(0);
+
+  function handleServiceSelect(id: string) {
+    const svc = (services ?? []).find((s) => s.id === id);
+    if (!svc) return;
+    setSelectedServiceId(id);
+    setSelectedMenuName(svc.name);
+    setSelectedDurationMin(svc.duration);
+    setSelectedIntervalMin(svc.intervalMin);
+    setSelectedPrice(svc.price);
+    // 日付・スロット選択をリセット
+    setSelectedDate("");
+    setSelectedTime("");
+    setAvailableSlots([]);
+    setSlotsError("");
+  }
+
+  // カレンダーが操作可能か: サービスがない or サービス選択済み
+  const calendarActive = !hasServices || selectedServiceId !== "";
 
   // カレンダー表示月
   const [viewYear,  setViewYear]  = useState(today.getFullYear());
@@ -166,13 +201,19 @@ export function ReserveForm({ tenantSlug, businessHours, phone, address, lineEna
   }
 
   function handleDateSelect(day: number) {
+    if (!calendarActive) return;
     const dateStr = toDateStr(viewYear, viewMonth, day);
     setSelectedDate(dateStr);
     setAvailableSlots([]);
     setSlotsError("");
 
     startFetching(async () => {
-      const result = await getAvailableSlots(tenantSlug, dateStr);
+      const result = await getAvailableSlots(
+        tenantSlug,
+        dateStr,
+        selectedDurationMin > 0 ? selectedDurationMin : undefined,
+        selectedIntervalMin > 0 ? selectedIntervalMin : undefined,
+      );
       if (result.error) {
         setSlotsError(result.error);
       } else if (result.slots.length === 0) {
@@ -207,6 +248,9 @@ export function ReserveForm({ tenantSlug, businessHours, phone, address, lineEna
         {/* 予約内容 */}
         <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-bg)] px-6 py-4 text-left w-full space-y-1">
           <p className="text-xs font-semibold text-[var(--brand-dark)] mb-1">予約内容</p>
+          {selectedMenuName && (
+            <p className="text-sm font-semibold text-[var(--brand-darker)]">{selectedMenuName}</p>
+          )}
           <p className="text-sm font-medium text-gray-800">{formatDateJP(selectedDate)}</p>
           <p className="text-sm text-gray-600">{selectedTime} 〜</p>
         </div>
@@ -275,6 +319,11 @@ export function ReserveForm({ tenantSlug, businessHours, phone, address, lineEna
             setSlotsError("");
             setViewYear(today.getFullYear());
             setViewMonth(today.getMonth());
+            setSelectedServiceId("");
+            setSelectedMenuName("");
+            setSelectedDurationMin(0);
+            setSelectedIntervalMin(0);
+            setSelectedPrice(0);
             setStep(1);
           }}
           className={btnOutline + " w-full"}
@@ -294,11 +343,48 @@ export function ReserveForm({ tenantSlug, businessHours, phone, address, lineEna
       <div className="space-y-4">
         <StepIndicator current={1} />
 
+        {/* メニュー選択（施術マスタがある場合のみ表示）*/}
+        {hasServices && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              施術メニューを選択
+              <span className="ml-1 text-red-500 font-normal normal-case">必須</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(services ?? []).map((svc) => (
+                <button
+                  key={svc.id}
+                  type="button"
+                  onClick={() => handleServiceSelect(svc.id)}
+                  className={[
+                    "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors",
+                    selectedServiceId === svc.id
+                      ? "border-[var(--brand-medium)] bg-[var(--brand-bg)] text-[var(--brand-dark)]"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-[var(--brand-border)] hover:bg-[var(--brand-bg)]",
+                  ].join(" ")}
+                >
+                  <span>{svc.name}</span>
+                  <span className="text-xs text-gray-400">
+                    {svc.duration > 0 && `${svc.duration}分`}
+                    {svc.duration > 0 && svc.price > 0 && " · "}
+                    {svc.price > 0 && `¥${svc.price.toLocaleString()}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {!calendarActive && (
+              <p className="text-xs text-amber-600">
+                メニューを選択すると日付が選択できます
+              </p>
+            )}
+          </div>
+        )}
+
         {/* 月ナビゲーション */}
-        <div className="flex items-center justify-between px-1">
+        <div className={["flex items-center justify-between px-1", !calendarActive && "opacity-40 pointer-events-none"].filter(Boolean).join(" ")}>
           <button
             onClick={prevMonth}
-            disabled={isAtMin}
+            disabled={isAtMin || !calendarActive}
             className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-gray-100 disabled:opacity-30 transition-colors"
             aria-label="前の月"
           >
@@ -326,10 +412,10 @@ export function ReserveForm({ tenantSlug, businessHours, phone, address, lineEna
         </div>
 
         {/* 日付グリッド */}
-        <div className="grid grid-cols-7 gap-y-1 text-center">
+        <div className={["grid grid-cols-7 gap-y-1 text-center", !calendarActive && "opacity-40 pointer-events-none"].filter(Boolean).join(" ")}>
           {cells.map((day, idx) => {
             if (day === null) return <div key={`e-${idx}`} />;
-            const available = isDateAvailable(day);
+            const available = calendarActive && isDateAvailable(day);
             const dow = new Date(viewYear, viewMonth, day).getDay();
             const isToday =
               today.getFullYear() === viewYear &&
@@ -425,13 +511,25 @@ export function ReserveForm({ tenantSlug, businessHours, phone, address, lineEna
       <StepIndicator current={3} />
 
       {/* 隠しフィールド */}
-      <input type="hidden" name="tenantSlug" value={tenantSlug} />
-      <input type="hidden" name="date"       value={selectedDate} />
-      <input type="hidden" name="time"       value={selectedTime} />
+      <input type="hidden" name="tenantSlug"   value={tenantSlug} />
+      <input type="hidden" name="date"         value={selectedDate} />
+      <input type="hidden" name="time"         value={selectedTime} />
+      {selectedMenuName    && <input type="hidden" name="menuName"    value={selectedMenuName} />}
+      {selectedDurationMin > 0 && <input type="hidden" name="durationMin"  value={String(selectedDurationMin)} />}
+      {selectedIntervalMin > 0 && <input type="hidden" name="intervalMin"  value={String(selectedIntervalMin)} />}
+      {selectedPrice       > 0 && <input type="hidden" name="price"        value={String(selectedPrice)} />}
 
       {/* 予約内容サマリー */}
       <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-bg)] px-4 py-4 space-y-1.5">
         <p className="text-xs font-semibold text-[var(--brand-dark)] mb-2">ご予約内容</p>
+        {selectedMenuName && (
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--brand-darker)]">
+            {selectedMenuName}
+            {selectedDurationMin > 0 && (
+              <span className="text-xs font-normal text-gray-500">（{selectedDurationMin}分）</span>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <CalendarDays size={14} className="text-[var(--brand-medium)] shrink-0" />
           {formatDateJP(selectedDate)}

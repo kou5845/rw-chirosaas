@@ -3,8 +3,9 @@
 /**
  * 予約作成・編集ダイアログ（汎用版）
  *
- * 患者詳細ページ（patientId 固定）と予約管理ページ（患者を検索選択）の
- * 両方で使用できる。editMode を渡すと編集モードで動作する。
+ * - A院（Professional + training）: 施術 / トレーニング タブ → マスタドロップダウン → 自動入力
+ * - A院（Professional のみ）/ B院: 施術マスタドロップダウン → 自動入力
+ * - マスタ未登録: 自由入力フォールバック
  *
  * CLAUDE.md 規約:
  *   - 予約は pending ステータスで作成（require_approval 必須）
@@ -14,18 +15,38 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import {
   X, CalendarPlus, Pencil, Loader2, AlertCircle, CheckCircle2,
-  Clock, Search, User,
+  Clock, Search, User, Dumbbell, Syringe,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   upsertAppointment,
   type UpsertAppointmentState,
 } from "@/app/[tenantId]/appointments/upsert-action";
+
+// ── 外部公開型 ────────────────────────────────────────────────────────────────
 
 export type BusinessHourData = {
   dayOfWeek: number;
   isOpen:    boolean;
   openTime:  string;
   closeTime: string;
+};
+
+export type ServiceItem = {
+  id:          string;
+  name:        string;
+  duration:    number;
+  intervalMin: number;
+  price:       number;
+};
+
+export type ExerciseItem = {
+  id:          string;
+  name:        string;
+  duration:    number;
+  intervalMin: number;
+  price:       number;
+  category:    string | null;
 };
 
 type Staff   = { id: string; displayName: string };
@@ -45,36 +66,28 @@ export type EditModeData = {
 };
 
 type Props = {
-  tenantId:       string;
-  tenantSlug:     string;
-  /** 固定患者ID（患者詳細ページから開く場合）。未指定の場合は患者検索UIを表示 */
-  patientId?:     string;
-  /** patientId 未指定時に必須 */
-  patientList?:   Patient[];
-  staffList:      Staff[];
-  businessHours:  BusinessHourData[];
-  lunchStartTime: string | null;
-  lunchEndTime:   string | null;
-  /** 予約スロットの刻み幅（分）: 15 | 20 | 30 | 60 */
-  slotInterval?:  number;
-  /** カレンダーのスロットクリックで渡される初期日付 "YYYY-MM-DD" */
-  initialDate?:   string;
-  /** カレンダーのスロットクリックで渡される初期時刻 "HH:mm" */
-  initialTime?:   string;
-  /** 渡すと編集モードとして動作する */
-  editMode?:      EditModeData;
-  onClose:        () => void;
+  tenantId:        string;
+  tenantSlug:      string;
+  patientId?:      string;
+  patientList?:    Patient[];
+  staffList:       Staff[];
+  businessHours:   BusinessHourData[];
+  lunchStartTime:  string | null;
+  lunchEndTime:    string | null;
+  slotInterval?:   number;
+  initialDate?:    string;
+  initialTime?:    string;
+  editMode?:       EditModeData;
+  /** 施術マスタ（duration/price でオートフィル）*/
+  services?:       ServiceItem[];
+  /** トレーニング種目マスタ（professional + training_record 有効時）*/
+  exercises?:      ExerciseItem[];
+  isProfessional?: boolean;
+  trainingEnabled?: boolean;
+  onClose:         () => void;
 };
 
-// ── 定数 ─────────────────────────────────────────────────────────────────────
-
-const DURATION_OPTIONS = [
-  { value: 30,  label: "30分" },
-  { value: 45,  label: "45分" },
-  { value: 60,  label: "60分" },
-  { value: 90,  label: "90分" },
-  { value: 120, label: "120分" },
-];
+// ── ユーティリティ ────────────────────────────────────────────────────────────
 
 function buildTimeOptions(slotInterval: number): string[] {
   const opts: string[] = [];
@@ -86,22 +99,6 @@ function buildTimeOptions(slotInterval: number): string[] {
   }
   return opts;
 }
-
-const today = new Date().toISOString().split("T")[0];
-
-// ── スタイル定数 ──────────────────────────────────────────────────────────────
-
-const selectCls =
-  "mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800 " +
-  "hover:border-[var(--brand-border)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)] " +
-  "focus:border-transparent transition-colors appearance-none cursor-pointer";
-const inputCls =
-  "mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 " +
-  "placeholder:text-gray-300 hover:border-[var(--brand-border)] focus:outline-none focus:ring-2 " +
-  "focus:ring-[var(--brand)] focus:border-transparent transition-colors";
-const errCls = "border-red-300 bg-red-50/50";
-
-// ── バリデーション ─────────────────────────────────────────────────────────────
 
 function timeToMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -118,22 +115,19 @@ function validateSlot(
 ): string | null {
   if (!dateStr || !timeStr || !duration) return null;
 
-  const date   = new Date(dateStr + "T00:00:00");
-  const jsDay  = date.getDay();
-  const bh     = businessHours.find((h) => h.dayOfWeek === jsDay);
-  const isOpen = bh?.isOpen  ?? true;
+  const date  = new Date(dateStr + "T00:00:00");
+  const jsDay = date.getDay();
+  const bh    = businessHours.find((h) => h.dayOfWeek === jsDay);
 
-  if (!isOpen) return "この日は休診日です";
+  if (!bh?.isOpen) return "この日は休診日です";
 
   const openTime  = bh?.openTime  ?? "09:00";
   const closeTime = bh?.closeTime ?? "20:00";
   const startMin  = timeToMin(timeStr);
   const endMin    = startMin + duration;
 
-  if (startMin < timeToMin(openTime))
-    return `営業開始前です（開始: ${openTime}〜）`;
-  if (endMin > timeToMin(closeTime))
-    return `終業時間を超えます（〜${closeTime}まで）`;
+  if (startMin < timeToMin(openTime))  return `営業開始前です（開始: ${openTime}〜）`;
+  if (endMin > timeToMin(closeTime))   return `終業時間を超えます（〜${closeTime}まで）`;
 
   if (lunchStartTime && lunchEndTime) {
     const ls = timeToMin(lunchStartTime), le = timeToMin(lunchEndTime);
@@ -144,7 +138,21 @@ function validateSlot(
   return null;
 }
 
-// ── 患者検索コンポーネント ────────────────────────────────────────────────────
+const today = new Date().toISOString().split("T")[0];
+
+// ── スタイル定数 ──────────────────────────────────────────────────────────────
+
+const selectCls =
+  "mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800 " +
+  "hover:border-[var(--brand-border)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)] " +
+  "focus:border-transparent transition-colors appearance-none cursor-pointer";
+const inputCls =
+  "mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 " +
+  "placeholder:text-gray-300 hover:border-[var(--brand-border)] focus:outline-none focus:ring-2 " +
+  "focus:ring-[var(--brand)] focus:border-transparent transition-colors";
+const errCls = "border-red-300 bg-red-50/50";
+
+// ── 患者検索 ─────────────────────────────────────────────────────────────────
 
 function PatientSelector({
   patientList,
@@ -160,15 +168,12 @@ function PatientSelector({
 
   const filtered = query.length === 0
     ? patientList.slice(0, 30)
-    : patientList
-        .filter((p) => p.displayName.includes(query))
-        .slice(0, 30);
+    : patientList.filter((p) => p.displayName.includes(query)).slice(0, 30);
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node))
         setOpen(false);
-      }
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -184,10 +189,7 @@ function PatientSelector({
   function handleInput(v: string) {
     setQuery(v);
     setOpen(true);
-    if (selected && selected.displayName !== v) {
-      setSelected(null);
-      onSelect(null);
-    }
+    if (selected && selected.displayName !== v) { setSelected(null); onSelect(null); }
   }
 
   return (
@@ -195,28 +197,19 @@ function PatientSelector({
       <div className="relative mt-1.5">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
         <input
-          type="text"
-          value={query}
-          placeholder="患者名で検索…"
-          autoComplete="off"
+          type="text" value={query} placeholder="患者名で検索…" autoComplete="off"
           onChange={(e) => handleInput(e.target.value)}
           onFocus={() => setOpen(true)}
           className={`${inputCls} pl-9 pr-3 ${!selected && query ? errCls : ""}`}
         />
-        {selected && (
-          <User size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--brand-medium)]" />
-        )}
+        {selected && <User size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--brand-medium)]" />}
       </div>
-
       {open && filtered.length > 0 && (
         <div className="absolute left-0 right-0 z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
           {filtered.map((p) => (
-            <button
-              key={p.id}
-              type="button"
+            <button key={p.id} type="button"
               onMouseDown={(e) => { e.preventDefault(); choose(p); }}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-[var(--brand-bg)] hover:text-[var(--brand-dark)]"
-            >
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-[var(--brand-bg)] hover:text-[var(--brand-dark)]">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--brand-bg)] text-xs font-bold text-[var(--brand-dark)]">
                 {p.displayName.slice(0, 1)}
               </div>
@@ -225,7 +218,6 @@ function PatientSelector({
           ))}
         </div>
       )}
-
       {open && query.length > 0 && filtered.length === 0 && (
         <div className="absolute left-0 right-0 z-50 mt-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400 shadow-lg">
           一致する患者が見つかりません
@@ -250,23 +242,41 @@ export function NewAppointmentDialog({
   initialDate,
   initialTime,
   editMode,
+  services     = [],
+  exercises    = [],
+  isProfessional  = false,
+  trainingEnabled = false,
   onClose,
 }: Props) {
-  const isEdit = !!editMode;
+  const isEdit       = !!editMode;
   const TIME_OPTIONS = buildTimeOptions(slotInterval);
+
+  // タブ表示制御
+  const showTreatmentTab = services.length > 0;
+  const showExerciseTab  = trainingEnabled && exercises.length > 0;
+  const showTabs         = showTreatmentTab && showExerciseTab;
+  const hasAnyMaster     = showTreatmentTab || showExerciseTab;
 
   const [state, action, isPending] = useActionState<UpsertAppointmentState, FormData>(
     upsertAppointment,
     null
   );
 
-  // バリデーション用制御値（編集モードでは既存値で初期化）
+  // 日時・所要時間（バリデーション用制御値）
   const [selectedDate,     setSelectedDate]     = useState(editMode?.date     ?? initialDate  ?? "");
   const [selectedTime,     setSelectedTime]     = useState(editMode?.time     ?? initialTime  ?? "");
   const [selectedDuration, setSelectedDuration] = useState(editMode?.durationMin ?? 0);
 
+  // メニュー選択
+  const [menuType,      setMenuType]      = useState<"service" | "exercise">("service");
+  const [menuName,      setMenuName]      = useState(editMode?.menuName ?? "");
+  const [priceValue,    setPriceValue]    = useState(
+    editMode?.price != null ? String(editMode.price) : ""
+  );
+  const [intervalMin,   setIntervalMin]   = useState(0);
+
   // 患者選択（patientId 未固定の場合）
-  const [selectedPatient, setSelectedPatient] = useState<{ id: string; displayName: string } | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const needPatientSelect = !patientId && !editMode?.patientId;
 
   // 成功後: 0.9秒後に自動クローズ
@@ -287,8 +297,34 @@ export function NewAppointmentDialog({
   const hasPatientError = needPatientSelect && !selectedPatient;
   const blockSubmit     = hasSlotError || hasPatientError;
 
-  // 編集モードの実効 patientId
   const effectivePatientId = patientId ?? editMode?.patientId;
+
+  // ── マスタ選択 → オートフィル ─────────────────────────────────
+  function handleMenuSelect(id: string, type: "service" | "exercise") {
+    const list = type === "service" ? services : exercises;
+    const item = list.find((i) => i.id === id);
+    if (!item) return;
+    setMenuName(item.name);
+    if (item.duration > 0) setSelectedDuration(item.duration);
+    setPriceValue(String(item.price));
+    setIntervalMin(item.intervalMin);
+  }
+
+  // ── タブ切替 ─────────────────────────────────────────────────
+  function handleTabChange(type: "service" | "exercise") {
+    setMenuType(type);
+    setMenuName("");
+    setSelectedDuration(0);
+    setPriceValue("");
+  }
+
+  // カテゴリごとにグループ化（exercise の場合のみ）
+  const groupedExercises = exercises.reduce<Record<string, ExerciseItem[]>>((acc, ex) => {
+    const key = ex.category ?? "その他";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(ex);
+    return acc;
+  }, {});
 
   return (
     <div
@@ -332,8 +368,9 @@ export function NewAppointmentDialog({
         ) : (
           <form action={action}>
             {/* hidden */}
-            <input type="hidden" name="tenantId"   value={tenantId} />
-            <input type="hidden" name="tenantSlug" value={tenantSlug} />
+            <input type="hidden" name="tenantId"    value={tenantId} />
+            <input type="hidden" name="tenantSlug"  value={tenantSlug} />
+            <input type="hidden" name="intervalMin" value={intervalMin} />
             {effectivePatientId && <input type="hidden" name="patientId" value={effectivePatientId} />}
             {!effectivePatientId && selectedPatient && (
               <input type="hidden" name="patientId" value={selectedPatient.id} />
@@ -351,17 +388,13 @@ export function NewAppointmentDialog({
                   </div>
                 )}
 
-                {/* ── 患者選択（patientId 未固定 + 編集モード外の場合のみ）── */}
+                {/* ── 患者選択 ── */}
                 {needPatientSelect && (
                   <div className="py-4">
                     <label className="block text-sm font-medium text-gray-700">
-                      患者
-                      <span className="ml-1 text-xs font-normal text-red-500">必須</span>
+                      患者<span className="ml-1 text-xs font-normal text-red-500">必須</span>
                     </label>
-                    <PatientSelector
-                      patientList={patientList ?? []}
-                      onSelect={setSelectedPatient}
-                    />
+                    <PatientSelector patientList={patientList ?? []} onSelect={setSelectedPatient} />
                     {!selectedPatient && hasPatientError && (
                       <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
                         <AlertCircle size={11} />患者を選択してください
@@ -369,8 +402,6 @@ export function NewAppointmentDialog({
                     )}
                   </div>
                 )}
-
-                {/* 編集モード: 患者名表示（読み取り専用）*/}
                 {isEdit && (
                   <div className="py-4">
                     <p className="text-sm font-medium text-gray-700">患者</p>
@@ -383,6 +414,124 @@ export function NewAppointmentDialog({
                   </div>
                 )}
 
+                {/* ── メニュー ── */}
+                <div className="py-4 space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    メニュー<span className="ml-1 text-xs font-normal text-red-500">必須</span>
+                  </label>
+
+                  {/* タブバー（施術 + トレーニング 両方あり） */}
+                  {showTabs && (
+                    <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => handleTabChange("service")}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-semibold transition-colors",
+                          menuType === "service"
+                            ? "bg-white text-[var(--brand-dark)] shadow-sm"
+                            : "text-gray-500 hover:text-gray-700"
+                        )}
+                      >
+                        <Syringe size={13} />施術
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleTabChange("exercise")}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-semibold transition-colors",
+                          menuType === "exercise"
+                            ? "bg-white text-[var(--brand-dark)] shadow-sm"
+                            : "text-gray-500 hover:text-gray-700"
+                        )}
+                      >
+                        <Dumbbell size={13} />トレーニング
+                      </button>
+                    </div>
+                  )}
+
+                  {/* マスタドロップダウン */}
+                  {hasAnyMaster && (menuType === "service" ? showTreatmentTab : showExerciseTab) && (
+                    menuType === "service" ? (
+                      <select
+                        key={`service-select-${menuType}`}
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) handleMenuSelect(e.target.value, "service");
+                          e.target.value = "";
+                        }}
+                        className={selectCls}
+                      >
+                        <option value="" disabled>施術メニューを選択…</option>
+                        {services.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                            {s.duration > 0 ? ` — ${s.duration}分` : ""}
+                            {s.price > 0 ? ` / ¥${s.price.toLocaleString()}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select
+                        key={`exercise-select-${menuType}`}
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) handleMenuSelect(e.target.value, "exercise");
+                          e.target.value = "";
+                        }}
+                        className={selectCls}
+                      >
+                        <option value="" disabled>トレーニング種目を選択…</option>
+                        {Object.entries(groupedExercises).map(([cat, items]) => (
+                          <optgroup key={cat} label={cat}>
+                            {items.map((ex) => (
+                              <option key={ex.id} value={ex.id}>
+                                {ex.name}
+                                {ex.duration > 0 ? ` — ${ex.duration}分` : ""}
+                                {ex.price > 0 ? ` / ¥${ex.price.toLocaleString()}` : ""}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    )
+                  )}
+
+                  {/* hidden: form 送信用 */}
+                  <input type="hidden" name="menuName" value={menuName} />
+
+                  {/* 選択済みメニュー名 — 編集可能フィールド（選択後 or 編集モード or マスタなし） */}
+                  {(menuName || !hasAnyMaster || isEdit) && (
+                    <div>
+                      {hasAnyMaster && (
+                        <p className="mb-1 text-xs text-gray-400">
+                          メニュー名<span className="ml-1 text-gray-300">（変更可）</span>
+                        </p>
+                      )}
+                      <input
+                        type="text"
+                        value={menuName}
+                        onChange={(e) => setMenuName(e.target.value)}
+                        placeholder={hasAnyMaster ? "メニュー名を変更する場合は入力" : "例: 整体施術60分、骨盤矯正"}
+                        className={`${inputCls} ${errors?.menuName ? errCls : ""}`}
+                      />
+                    </div>
+                  )}
+
+                  {/* マスタあり + 未選択 の案内 */}
+                  {hasAnyMaster && !menuName && !isEdit && (
+                    <p className="text-xs text-gray-400">
+                      ↑ メニューを選択すると所要時間・料金が自動入力されます
+                    </p>
+                  )}
+
+                  {errors?.menuName && (
+                    <p className="flex items-center gap-1 text-xs text-red-600">
+                      <AlertCircle size={11} />{errors.menuName}
+                    </p>
+                  )}
+                </div>
+
                 {/* ── 予約日 + 時間 ── */}
                 <div className="grid grid-cols-2 gap-4 py-4">
                   <div>
@@ -390,9 +539,7 @@ export function NewAppointmentDialog({
                       予約日<span className="ml-1 text-xs font-normal text-red-500">必須</span>
                     </label>
                     <input
-                      id="appt-date"
-                      name="date"
-                      type="date"
+                      id="appt-date" name="date" type="date"
                       min={isEdit ? undefined : today}
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
@@ -409,8 +556,7 @@ export function NewAppointmentDialog({
                       時間<span className="ml-1 text-xs font-normal text-red-500">必須</span>
                     </label>
                     <select
-                      id="appt-time"
-                      name="time"
+                      id="appt-time" name="time"
                       value={selectedTime}
                       onChange={(e) => setSelectedTime(e.target.value)}
                       className={`${selectCls} ${errors?.time ? errCls : ""}`}
@@ -434,44 +580,23 @@ export function NewAppointmentDialog({
                   </div>
                 )}
 
-                {/* ── メニュー ── */}
-                <div className="py-4">
-                  <label htmlFor="appt-menu" className="block text-sm font-medium text-gray-700">
-                    メニュー<span className="ml-1 text-xs font-normal text-red-500">必須</span>
-                  </label>
-                  <input
-                    id="appt-menu"
-                    name="menuName"
-                    type="text"
-                    defaultValue={editMode?.menuName ?? ""}
-                    placeholder="例: 整体施術60分、骨盤矯正"
-                    className={`${inputCls} ${errors?.menuName ? errCls : ""}`}
-                  />
-                  {errors?.menuName && (
-                    <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-                      <AlertCircle size={11} />{errors.menuName}
-                    </p>
-                  )}
-                </div>
-
                 {/* ── 所要時間 + 料金 ── */}
                 <div className="grid grid-cols-2 gap-4 py-4">
                   <div>
                     <label htmlFor="appt-duration" className="block text-sm font-medium text-gray-700">
-                      所要時間<span className="ml-1 text-xs font-normal text-red-500">必須</span>
+                      所要時間（分）<span className="ml-1 text-xs font-normal text-red-500">必須</span>
                     </label>
-                    <select
+                    <input
                       id="appt-duration"
                       name="durationMin"
+                      type="number"
+                      min={1}
+                      max={480}
                       value={selectedDuration || ""}
                       onChange={(e) => setSelectedDuration(Number(e.target.value))}
-                      className={`${selectCls} ${errors?.durationMin ? errCls : ""}`}
-                    >
-                      <option value="">選択</option>
-                      {DURATION_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
+                      placeholder="60"
+                      className={`${inputCls} ${errors?.durationMin ? errCls : ""}`}
+                    />
                     {errors?.durationMin && (
                       <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
                         <AlertCircle size={11} />{errors.durationMin}
@@ -489,7 +614,8 @@ export function NewAppointmentDialog({
                       inputMode="numeric"
                       min={0}
                       step={100}
-                      defaultValue={editMode?.price ?? ""}
+                      value={priceValue}
+                      onChange={(e) => setPriceValue(e.target.value)}
                       placeholder="例: 5000"
                       className={`${inputCls} ${errors?.price ? errCls : ""}`}
                     />
@@ -507,12 +633,9 @@ export function NewAppointmentDialog({
                     <label htmlFor="appt-staff" className="block text-sm font-medium text-gray-700">
                       担当スタッフ<span className="ml-1 text-xs font-normal text-gray-400">任意</span>
                     </label>
-                    <select
-                      id="appt-staff"
-                      name="staffId"
+                    <select id="appt-staff" name="staffId"
                       defaultValue={editMode?.staffId ?? ""}
-                      className={selectCls}
-                    >
+                      className={selectCls}>
                       <option value="">指定なし</option>
                       {staffList.map((s) => (
                         <option key={s.id} value={s.id}>{s.displayName}</option>
@@ -526,10 +649,7 @@ export function NewAppointmentDialog({
                   <label htmlFor="appt-note" className="block text-sm font-medium text-gray-700">
                     備考<span className="ml-1 text-xs font-normal text-gray-400">任意</span>
                   </label>
-                  <textarea
-                    id="appt-note"
-                    name="note"
-                    rows={3}
+                  <textarea id="appt-note" name="note" rows={3}
                     defaultValue={editMode?.note ?? ""}
                     placeholder="患者からの要望・院内メモなど"
                     className="mt-1.5 block w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 placeholder:text-gray-300 hover:border-[var(--brand-border)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-transparent transition-colors"
@@ -540,10 +660,7 @@ export function NewAppointmentDialog({
                 {!isEdit && (
                   <div className="py-4">
                     <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        name="sendNotification"
-                        defaultChecked
+                      <input type="checkbox" name="sendNotification" defaultChecked
                         className="h-4 w-4 rounded border-gray-300 text-[var(--brand-medium)] accent-[var(--brand-medium)] focus:ring-[var(--brand)]"
                       />
                       <span className="text-sm text-gray-700">

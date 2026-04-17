@@ -86,7 +86,7 @@ export async function createAppointment(
 
   // staffId が指定されている場合は同テナント内のスタッフか確認
   if (staffId) {
-    const staff = await prisma.profile.findFirst({
+    const staff = await prisma.staff.findFirst({
       where:  { id: staffId, tenantId, isActive: true },
       select: { id: true },
     });

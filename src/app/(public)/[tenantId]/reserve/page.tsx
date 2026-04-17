@@ -9,7 +9,7 @@
 import { notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { ReserveForm, type BusinessHourSummary } from "./ReserveForm";
+import { ReserveForm, type BusinessHourSummary, type ServiceSummary } from "./ReserveForm";
 
 type Props = {
   params: Promise<{ tenantId: string }>;
@@ -45,6 +45,14 @@ export default async function ReservePage({ params }: Props) {
   });
 
   const businessHours: BusinessHourSummary[] = rawHours;
+
+  // 施術マスタ（メニュー選択 + スロット可否算出に使用）
+  const rawServices = await prisma.service.findMany({
+    where:   { tenantId: tenant.id, isActive: true },
+    select:  { id: true, name: true, duration: true, intervalMin: true, price: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  const services: ServiceSummary[] = rawServices;
 
   return (
     <div className="min-h-screen bg-[#F0FAFB]">
@@ -89,6 +97,7 @@ export default async function ReservePage({ params }: Props) {
           <ReserveForm
             tenantSlug={slug}
             businessHours={businessHours}
+            services={services}
             phone={tenant.phone}
             address={tenant.address}
             lineEnabled={tenant.lineEnabled}

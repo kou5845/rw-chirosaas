@@ -3,17 +3,19 @@
 /**
  * 施術マスタ管理 — クライアントコンポーネント
  *
- * 一覧表示 + 新規作成 / 編集 / 論理削除 をモーダルダイアログで実装。
- * Server Actions のレスポンスを useActionState で受け取り
- * 成功 / エラーを Sonner トーストで通知する。
+ * 一覧表示 + 新規作成 / 編集 / 論理削除 / 並び替えをモーダルダイアログで実装。
  */
 
 import { useState, useActionState, useEffect, useTransition } from "react";
-import { Plus, Pencil, Trash2, RefreshCcw, X, Loader2, AlertCircle, Syringe, Clock, Banknote, FileText } from "lucide-react";
+import {
+  Plus, Pencil, X, Loader2, AlertCircle,
+  Syringe, Clock, Banknote, FileText, ChevronUp, ChevronDown, Timer,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 import {
-  createService, updateService, deactivateService, reactivateService,
+  createService, updateService, toggleServiceStatus, reorderServices,
   type ServiceFormState,
 } from "./actions";
 
@@ -23,8 +25,10 @@ export type ServiceRow = {
   id:          string;
   name:        string;
   duration:    number;
+  intervalMin: number;
   price:       number;
   description: string | null;
+  sortOrder:   number;
   isActive:    boolean;
 };
 
@@ -47,43 +51,63 @@ export function ServicesClient({ services: initialServices, tenantId, tenantSlug
   const [services, setServices]    = useState<ServiceRow[]>(initialServices);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
   const [editTarget, setEditTarget] = useState<ServiceRow | null>(null);
-  const [showInactive, setShowInactive] = useState(false);
+  const [, startReorder] = useTransition();
 
   // サーバーからの再レンダ時に同期
   useEffect(() => { setServices(initialServices); }, [initialServices]);
 
-  const visible = showInactive ? services : services.filter((s) => s.isActive);
+  const visible = services; // スイッチで直接切替するため全件表示
   const inactiveCount = services.filter((s) => !s.isActive).length;
 
   function openCreate() { setEditTarget(null); setDialogMode("create"); }
   function openEdit(s: ServiceRow) { setEditTarget(s); setDialogMode("edit"); }
   function closeDialog() { setDialogMode(null); setEditTarget(null); }
 
+  function moveService(id: string, direction: "up" | "down") {
+    const idx = visible.findIndex((s) => s.id === id);
+    if (direction === "up" && idx === 0) return;
+    if (direction === "down" && idx === visible.length - 1) return;
+
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    const newVisible = [...visible];
+    [newVisible[idx], newVisible[swapIdx]] = [newVisible[swapIdx], newVisible[idx]];
+
+    const updates = newVisible.map((s, i) => ({ id: s.id, sortOrder: i * 10 }));
+    const updateMap = new Map(updates.map((u) => [u.id, u.sortOrder]));
+
+    // 楽観的更新
+    const updated = services
+      .map((s) => ({ ...s, sortOrder: updateMap.get(s.id) ?? s.sortOrder }))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    setServices(updated);
+
+    startReorder(async () => {
+      const result = await reorderServices(updates, tenantId, tenantSlug);
+      if (!result.success) toast.error(result.error ?? "並び替えに失敗しました");
+    });
+  }
+
+  function handleToggle(id: string, next: boolean) {
+    setServices((prev) =>
+      prev.map((s) => s.id === id ? { ...s, isActive: next } : s)
+    );
+  }
+
   return (
     <div className="space-y-5">
       {/* ── ヘッダー ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-800">施術管理</h1>
+          <h1 className="text-xl font-semibold text-gray-800">施術メニュー管理</h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            施術メニューの一覧・登録・編集・停止を管理します
+            施術メニューの一覧・登録・編集・停止・並び替えを管理します
           </p>
         </div>
         <div className="flex items-center gap-2">
           {inactiveCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowInactive((v) => !v)}
-              className={cn(
-                "flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors",
-                showInactive
-                  ? "border-[var(--brand-border)] bg-[var(--brand-bg)] text-[var(--brand-dark)]"
-                  : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
-              )}
-            >
-              <RefreshCcw size={13} />
-              停止中を{showInactive ? "隠す" : `表示 (${inactiveCount})`}
-            </button>
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-500">
+              停止中 {inactiveCount}件
+            </span>
           )}
           <button
             type="button"
@@ -105,9 +129,13 @@ export function ServicesClient({ services: initialServices, tenantId, tenantSlug
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/60">
+                  <th className="w-16 px-3 py-3.5 text-center text-xs font-semibold uppercase tracking-wide text-gray-400">順番</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">施術名</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
                     <span className="flex items-center gap-1"><Clock size={11} />所要時間</span>
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400 hidden lg:table-cell">
+                    <span className="flex items-center gap-1"><Timer size={11} />インターバル</span>
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
                     <span className="flex items-center gap-1"><Banknote size={11} />料金</span>
@@ -118,13 +146,17 @@ export function ServicesClient({ services: initialServices, tenantId, tenantSlug
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {visible.map((svc) => (
-                  <ServiceRow
+                {visible.map((svc, idx) => (
+                  <ServiceTableRow
                     key={svc.id}
                     svc={svc}
                     tenantId={tenantId}
                     tenantSlug={tenantSlug}
+                    isFirst={idx === 0}
+                    isLast={idx === visible.length - 1}
                     onEdit={() => openEdit(svc)}
+                    onMove={(dir) => moveService(svc.id, dir)}
+                    onToggle={handleToggle}
                   />
                 ))}
               </tbody>
@@ -151,30 +183,57 @@ export function ServicesClient({ services: initialServices, tenantId, tenantSlug
 // テーブル行
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ServiceRow({
-  svc, tenantId, tenantSlug, onEdit,
+function ServiceTableRow({
+  svc, tenantId, tenantSlug, isFirst, isLast, onEdit, onMove, onToggle,
 }: {
-  svc: ServiceRow;
-  tenantId: string;
+  svc:        ServiceRow;
+  tenantId:   string;
   tenantSlug: string;
-  onEdit: () => void;
+  isFirst:    boolean;
+  isLast:     boolean;
+  onEdit:     () => void;
+  onMove:     (dir: "up" | "down") => void;
+  onToggle:   (id: string, next: boolean) => void;
 }) {
   const [isPending, startTransition] = useTransition();
 
-  function handleToggle() {
+  function handleSwitch(checked: boolean) {
     startTransition(async () => {
-      const action = svc.isActive ? deactivateService : reactivateService;
-      const result = await action(svc.id, tenantId, tenantSlug);
+      const result = await toggleServiceStatus(svc.id, checked, tenantId, tenantSlug);
       if (!result.success) {
-        toast.error(result.error ?? "操作に失敗しました");
+        toast.error(result.error ?? "状態の更新に失敗しました");
       } else {
-        toast.success(svc.isActive ? `「${svc.name}」を停止しました` : `「${svc.name}」を再開しました`);
+        onToggle(svc.id, checked);
+        toast.success("状態を更新しました");
       }
     });
   }
 
   return (
     <tr className={cn("group transition-colors hover:bg-gray-50/60", !svc.isActive && "opacity-50")}>
+      {/* 並び替えボタン */}
+      <td className="px-3 py-4">
+        <div className="flex flex-col items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => onMove("up")}
+            disabled={isFirst}
+            aria-label="上に移動"
+            className="flex h-6 w-6 items-center justify-center rounded text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:pointer-events-none disabled:opacity-20"
+          >
+            <ChevronUp size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove("down")}
+            disabled={isLast}
+            aria-label="下に移動"
+            className="flex h-6 w-6 items-center justify-center rounded text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:pointer-events-none disabled:opacity-20"
+          >
+            <ChevronDown size={13} />
+          </button>
+        </div>
+      </td>
       <td className="px-5 py-4">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-bg)]">
@@ -184,16 +243,32 @@ function ServiceRow({
         </div>
       </td>
       <td className="px-5 py-4 text-gray-600">{svc.duration}分</td>
+      <td className="hidden px-5 py-4 text-gray-500 lg:table-cell">
+        {svc.intervalMin > 0 ? `+${svc.intervalMin}分` : "—"}
+      </td>
       <td className="px-5 py-4 font-medium text-gray-800">¥{svc.price.toLocaleString()}</td>
       <td className="hidden px-5 py-4 text-gray-500 md:table-cell max-w-[200px]">
         <span className="line-clamp-1">{svc.description ?? "—"}</span>
       </td>
       <td className="px-5 py-4 text-center">
-        {svc.isActive ? (
-          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">有効</span>
-        ) : (
-          <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-500">停止中</span>
-        )}
+        <div className="flex items-center justify-center gap-2">
+          {isPending ? (
+            <Loader2 size={13} className="animate-spin text-gray-400" />
+          ) : (
+            <Switch
+              checked={svc.isActive}
+              onCheckedChange={handleSwitch}
+              disabled={isPending}
+              aria-label={svc.isActive ? "有効 — クリックで停止" : "停止中 — クリックで有効化"}
+            />
+          )}
+          <span className={cn(
+            "text-xs font-medium",
+            svc.isActive ? "text-emerald-600" : "text-gray-400"
+          )}>
+            {svc.isActive ? "有効" : "停止"}
+          </span>
+        </div>
       </td>
       <td className="px-5 py-4">
         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -204,27 +279,6 @@ function ServiceRow({
             className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-[var(--brand-bg)] hover:text-[var(--brand-dark)]"
           >
             <Pencil size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={handleToggle}
-            disabled={isPending}
-            aria-label={svc.isActive ? "停止" : "再開"}
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-              svc.isActive
-                ? "text-gray-400 hover:bg-red-50 hover:text-red-500"
-                : "text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600",
-              "disabled:opacity-50"
-            )}
-          >
-            {isPending ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : svc.isActive ? (
-              <Trash2 size={13} />
-            ) : (
-              <RefreshCcw size={13} />
-            )}
           </button>
         </div>
       </td>
@@ -308,8 +362,8 @@ function ServiceDialog({
             {errors?.name && <FieldError msg={errors.name} />}
           </div>
 
-          {/* 所要時間 + 料金 */}
-          <div className="py-4 grid grid-cols-2 gap-4">
+          {/* 所要時間 + インターバル + 料金 */}
+          <div className="py-4 grid grid-cols-3 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 所要時間（分） <span className="text-xs text-red-500">必須</span>
@@ -322,6 +376,21 @@ function ServiceDialog({
                 <span className="absolute right-3 top-1/2 mt-0.5 translate-y-0 text-xs text-gray-400">分</span>
               </div>
               {errors?.duration && <FieldError msg={errors.duration} />}
+            </div>
+            <div>
+              <label className="flex items-center gap-1 text-sm font-medium text-gray-700">
+                <Timer size={13} className="text-gray-400" />
+                インターバル
+                <span className="text-xs text-gray-400">任意</span>
+              </label>
+              <div className="relative">
+                <input name="intervalMin" type="number" min="0" max="120"
+                  defaultValue={initial?.intervalMin ?? 0}
+                  placeholder="0"
+                  className={cn(inputBase, "pr-8", errors?.intervalMin ? inputErrorCls : inputNormal)} />
+                <span className="absolute right-3 top-1/2 mt-0.5 translate-y-0 text-xs text-gray-400">分</span>
+              </div>
+              {errors?.intervalMin && <FieldError msg={errors.intervalMin} />}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -337,6 +406,11 @@ function ServiceDialog({
               {errors?.price && <FieldError msg={errors.price} />}
             </div>
           </div>
+
+          {/* インターバル説明 */}
+          <p className="pb-2 -mt-2 text-xs text-gray-400">
+            ※ インターバルは「次の予約までの準備時間」です。予約枠の計算に含まれますが、お客様への表示には含まれません。
+          </p>
 
           {/* 説明 */}
           <div className="py-4">

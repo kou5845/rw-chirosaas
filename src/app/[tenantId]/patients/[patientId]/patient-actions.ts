@@ -198,3 +198,66 @@ export async function deletePatient(
   revalidatePath(`/${tenantSlug}/patients`);
   redirect(`/${tenantSlug}/patients`);
 }
+
+// ── マイページ アクセストークン生成 ──────────────────────────────────
+
+export type MypageTokenResult =
+  | { success: true; token: string }
+  | { success: false; error: string };
+
+export async function generateMypageToken(
+  patientId:  string,
+  tenantId:   string,
+  tenantSlug: string,
+): Promise<MypageTokenResult> {
+  // CLAUDE.md 絶対ルール: tenantId で他テナントの患者を操作できないよう確認
+  const existing = await prisma.patient.findFirst({
+    where: { id: patientId, tenantId },
+    select: { id: true },
+  });
+  if (!existing) {
+    return { success: false, error: "患者が見つかりません。" };
+  }
+
+  const token = crypto.randomUUID();
+
+  try {
+    await prisma.patient.update({
+      where: { id: patientId },
+      data:  { accessToken: token },
+    });
+  } catch (e) {
+    console.error("[generateMypageToken] DB error:", e);
+    return { success: false, error: "トークンの生成に失敗しました。" };
+  }
+
+  revalidatePath(`/${tenantSlug}/patients/${patientId}`);
+  return { success: true, token };
+}
+
+export async function revokeMypageToken(
+  patientId:  string,
+  tenantId:   string,
+  tenantSlug: string,
+): Promise<{ success: boolean; error?: string }> {
+  const existing = await prisma.patient.findFirst({
+    where: { id: patientId, tenantId },
+    select: { id: true },
+  });
+  if (!existing) {
+    return { success: false, error: "患者が見つかりません。" };
+  }
+
+  try {
+    await prisma.patient.update({
+      where: { id: patientId },
+      data:  { accessToken: null },
+    });
+  } catch (e) {
+    console.error("[revokeMypageToken] DB error:", e);
+    return { success: false, error: "トークンの失効に失敗しました。" };
+  }
+
+  revalidatePath(`/${tenantSlug}/patients/${patientId}`);
+  return { success: true };
+}

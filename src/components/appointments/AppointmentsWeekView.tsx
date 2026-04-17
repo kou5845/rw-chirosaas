@@ -27,7 +27,7 @@ import {
   type DragMoveEvent,
 } from "@dnd-kit/core";
 import { WeeklyCalendar, type SerializedAppointment, type BusinessHourData, HOUR_HEIGHT } from "./WeeklyCalendar";
-import { NewAppointmentDialog, type EditModeData } from "./NewAppointmentDialog";
+import { NewAppointmentDialog, type EditModeData, type ServiceItem, type ExerciseItem } from "./NewAppointmentDialog";
 import { rescheduleAppointment } from "@/app/[tenantId]/appointments/reschedule-action";
 import { deleteAppointment } from "@/app/[tenantId]/appointments/delete-action";
 
@@ -37,18 +37,22 @@ type Staff   = { id: string; displayName: string };
 type Patient = { id: string; displayName: string };
 
 type Props = {
-  weekStartStr:   string;
-  appointments:   SerializedAppointment[];
-  slug:           string;
-  pendingCount:   number;
-  tenantId:       string;
-  businessHours:  BusinessHourData[];
-  lunchStartTime: string | null;
-  lunchEndTime:   string | null;
-  slotInterval:   number;
-  maxCapacity:    number;
-  staffList:      Staff[];
-  patientList:    Patient[];
+  weekStartStr:     string;
+  appointments:     SerializedAppointment[];
+  slug:             string;
+  pendingCount:     number;
+  tenantId:         string;
+  businessHours:    BusinessHourData[];
+  lunchStartTime:   string | null;
+  lunchEndTime:     string | null;
+  slotInterval:     number;
+  maxCapacity:      number;
+  staffList:        Staff[];
+  patientList:      Patient[];
+  services?:        ServiceItem[];
+  exercises?:       ExerciseItem[];
+  isProfessional?:  boolean;
+  trainingEnabled?: boolean;
 };
 
 // ─── ユーティリティ ───────────────────────────────────────────────────────────
@@ -252,8 +256,9 @@ function DragCardPreview({
     confirmed: { bg: "bg-[#E8F7F8]",   border: "border-[#91D2D9]",  text: "text-[#1a6a72]",   accent: "bg-[#91D2D9]" },
   };
   const cfg      = statusColors[appt.status] ?? statusColors.confirmed;
+  const blockMin = (new Date(appt.endAt).getTime() - new Date(appt.startAt).getTime()) / 60000;
   const isShort  = appt.durationMin <= 30;
-  const heightPx = Math.max((appt.durationMin / 60) * HOUR_HEIGHT - 4, 28);
+  const heightPx = Math.max((blockMin / 60) * HOUR_HEIGHT - 4, 28);
 
   const fmtTime = (iso: string) => {
     const d = new Date(iso);
@@ -281,8 +286,13 @@ function DragCardPreview({
               {appt.menuName}
             </p>
           )}
+          {!isShort && appt.staffName && (
+            <p className="truncate text-[10px] leading-tight text-gray-400">
+              {appt.staffName}
+            </p>
+          )}
           {!isShort && (
-            <p className={`mt-0.5 text-[10px] leading-none opacity-70 ${cfg.text}`}>
+            <p className={`mt-0.5 text-[10px] leading-none opacity-60 ${cfg.text}`}>
               {fmtTime(appt.startAt)}〜
             </p>
           )}
@@ -322,6 +332,10 @@ export function AppointmentsWeekView({
   maxCapacity,
   staffList,
   patientList,
+  services,
+  exercises,
+  isProfessional,
+  trainingEnabled,
 }: Props) {
   // ── 新規作成モーダル状態 ──
   const [modalOpen,    setModalOpen]   = useState(false);
@@ -466,7 +480,9 @@ export function AppointmentsWeekView({
     if (!snap) return;
 
     const { dayIdx, snappedMin } = snap;
-    const newEndMin = snappedMin + appt.durationMin;
+    // ブロック幅 = endAt - startAt（所要時間 + インターバル）を保持する
+    const blockDurMin = (new Date(appt.endAt).getTime() - new Date(appt.startAt).getTime()) / 60000;
+    const newEndMin   = snappedMin + blockDurMin;
 
     // ── 4. バリデーション ──
     const weekStart = parseDateStr(weekStartStr);
@@ -501,7 +517,7 @@ export function AppointmentsWeekView({
       dropDate.getFullYear(), dropDate.getMonth(), dropDate.getDate(),
       Math.floor(snappedMin / 60), snappedMin % 60, 0, 0,
     );
-    const newEndAt = new Date(newStartAt.getTime() + appt.durationMin * 60 * 1000);
+    const newEndAt = new Date(newStartAt.getTime() + blockDurMin * 60 * 1000);
 
     // ── 7. 楽観的更新 ──
     const originalAppts = localAppts;
@@ -586,6 +602,10 @@ export function AppointmentsWeekView({
           slotInterval={slotInterval}
           initialDate={initialDate}
           initialTime={initialTime}
+          services={services}
+          exercises={exercises}
+          isProfessional={isProfessional}
+          trainingEnabled={trainingEnabled}
           onClose={() => setModalOpen(false)}
         />
       )}
@@ -601,6 +621,10 @@ export function AppointmentsWeekView({
           lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           editMode={editMode}
+          services={services}
+          exercises={exercises}
+          isProfessional={isProfessional}
+          trainingEnabled={trainingEnabled}
           onClose={() => setEditMode(null)}
         />
       )}

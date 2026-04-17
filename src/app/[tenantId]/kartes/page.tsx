@@ -74,7 +74,7 @@ export default async function KartesPage({ params }: Props) {
         select: { id: true, displayName: true },
       },
       staff: {
-        select: { displayName: true },
+        select: { name: true },
       },
       _count: {
         select: { exerciseRecords: true },
@@ -235,7 +235,7 @@ export default async function KartesPage({ params }: Props) {
                       </p>
                       {karte.staff && (
                         <p className="truncate text-[11px] text-gray-400">
-                          担当: {karte.staff.displayName}
+                          担当: {karte.staff.name}
                         </p>
                       )}
                     </div>

@@ -57,14 +57,26 @@ export async function createKarte(
   const exerciseJson = formData.get("exerciseRecordsJson") as string | null;
   const mediaJson    = formData.get("mediaJson")            as string | null;
 
+  const bodyCompValuesJson = formData.get("bodyCompValuesJson") as string | null;
+  const bodyCompValues = bodyCompValuesJson ? JSON.parse(bodyCompValuesJson) : null;
+
+  const bcWeight      = bodyCompValues?.weight      ?? null;
+  const bcBodyFat     = bodyCompValues?.bodyFat     ?? null;
+  const bcBmi         = bodyCompValues?.bmi         ?? null;
+  const bcMuscleMass  = bodyCompValues?.muscleMass  ?? null;
+  const bcBmr         = bodyCompValues?.bmr         ?? null;
+  const bcVisceralFat = bodyCompValues?.visceralFat ?? null;
+
   // ── バリデーション ─────────────────────────────────────────────
   if (karteType === "MEDICAL" && !conditionNote && !progressNote) {
     return { error: "症状・主訴、または経過・所見のいずれかを入力してください。" };
   }
   if (karteType === "TRAINING") {
     const rows: ExerciseRowInput[] = exerciseJson ? JSON.parse(exerciseJson) : [];
-    if (rows.filter((r) => r.exerciseId).length === 0 && !progressNote) {
-      return { error: "トレーニング種目を1つ以上追加するか、メモを入力してください。" };
+    const hasExercise = rows.filter((r) => r.exerciseId).length > 0;
+    const hasBodyComp = [bcWeight, bcBodyFat, bcBmi, bcMuscleMass, bcBmr, bcVisceralFat].some((v) => v !== null);
+    if (!hasExercise && !hasBodyComp && !progressNote) {
+      return { error: "体組成データを1項目以上入力するか、メモを入力してください。" };
     }
   }
 
@@ -102,6 +114,13 @@ export async function createKarte(
           conditionStatus,
           bodyParts,
           treatments,
+          weight:      bcWeight,
+          bodyFat:     bcBodyFat,
+          bmi:         bcBmi,
+          muscleMass:  bcMuscleMass,
+          bmr:         bcBmr,
+          visceralFat: bcVisceralFat,
+          bodyCompValues,
         },
       });
 
@@ -178,6 +197,25 @@ export async function updateKarte(
   const newMediaJson     = formData.get("mediaJson")           as string | null;
   const deleteMediaJson  = formData.get("deleteMediaIdsJson")  as string | null;
 
+  const bodyCompValuesJson = formData.get("bodyCompValuesJson") as string | null;
+  const bodyCompValues = bodyCompValuesJson ? JSON.parse(bodyCompValuesJson) : null;
+
+  const bcWeightU      = bodyCompValues?.weight      ?? null;
+  const bcBodyFatU     = bodyCompValues?.bodyFat     ?? null;
+  const bcBmiU         = bodyCompValues?.bmi         ?? null;
+  const bcMuscleMassU  = bodyCompValues?.muscleMass  ?? null;
+  const bcBmrU         = bodyCompValues?.bmr         ?? null;
+  const bcVisceralFatU = bodyCompValues?.visceralFat ?? null;
+
+  const karteDateTimeRaw = formData.get("karteDateTime") as string | null;
+  let createdAtUpdate: Date | undefined;
+  if (karteDateTimeRaw) {
+    const d = new Date(karteDateTimeRaw);
+    if (!isNaN(d.getTime())) {
+      createdAtUpdate = d;
+    }
+  }
+
   // ── バリデーション ─────────────────────────────────────────────
   if (!karteId) return { error: "カルテIDが不正です。" };
 
@@ -186,8 +224,10 @@ export async function updateKarte(
   }
   if (karteType === "TRAINING") {
     const rows: ExerciseRowInput[] = exerciseJson ? JSON.parse(exerciseJson) : [];
-    if (rows.filter((r) => r.exerciseId).length === 0 && !progressNote) {
-      return { error: "トレーニング種目を1つ以上追加するか、メモを入力してください。" };
+    const hasExercise = rows.filter((r) => r.exerciseId).length > 0;
+    const hasBodyComp = [bcWeightU, bcBodyFatU, bcBmiU, bcMuscleMassU, bcBmrU, bcVisceralFatU].some((v) => v !== null);
+    if (!hasExercise && !hasBodyComp && !progressNote) {
+      return { error: "体組成データを1項目以上入力するか、メモを入力してください。" };
     }
   }
 
@@ -237,6 +277,14 @@ export async function updateKarte(
           conditionStatus,
           bodyParts,
           treatments,
+          weight:      bcWeightU,
+          bodyFat:     bcBodyFatU,
+          bmi:         bcBmiU,
+          muscleMass:  bcMuscleMassU,
+          bmr:         bcBmrU,
+          visceralFat: bcVisceralFatU,
+          bodyCompValues,
+          createdAt:   createdAtUpdate,
         },
       });
 

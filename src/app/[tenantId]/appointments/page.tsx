@@ -34,6 +34,7 @@ import { AppointmentsWeekView } from "@/components/appointments/AppointmentsWeek
 import { AppointmentListCard, type ListAppointment } from "./AppointmentListCard";
 import { PendingApprovalList } from "./PendingApprovalList";
 import type { AppointmentStatus } from "@prisma/client";
+import type { ServiceItem, ExerciseItem } from "@/components/appointments/NewAppointmentDialog";
 
 type Props = {
   params:       Promise<{ tenantId: string }>;
@@ -67,6 +68,38 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   });
   if (!tenant) notFound();
 
+  // フィーチャートグル（メニュー選択タブ制御用）
+  const [karteFeature, trainingFeature] = await Promise.all([
+    prisma.tenantSetting.findUnique({
+      where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" } },
+      select: { featureValue: true },
+    }),
+    prisma.tenantSetting.findUnique({
+      where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "training_record" } },
+      select: { featureValue: true },
+    }),
+  ]);
+  const isProfessional  = karteFeature?.featureValue === "professional";
+  const trainingEnabled = trainingFeature?.featureValue === "true";
+
+  // Service マスタ取得（施術メニュー選択用: 全テナント共通）
+  const servicesRaw = await prisma.service.findMany({
+    where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
+    select:  { id: true, name: true, duration: true, intervalMin: true, price: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  const services: ServiceItem[] = servicesRaw;
+
+  // Exercise マスタ取得（training_record 有効テナントのみ）
+  const exercisesRaw = isProfessional && trainingEnabled
+    ? await prisma.exercise.findMany({
+        where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
+        select:  { id: true, name: true, duration: true, intervalMin: true, price: true, category: true },
+        orderBy: { sortOrder: "asc" },
+      })
+    : [];
+  const exercises: ExerciseItem[] = exercisesRaw;
+
   // 曜日別営業時間
   const rawHours = await prisma.businessHour.findMany({
     where:  { tenantId: tenant.id },
@@ -75,11 +108,12 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   const businessHours: BusinessHourData[] = rawHours;
 
   // スタッフ一覧（週間ビューの新規予約モーダル + リストビューの編集ダイアログで使用）
-  const staffList = await prisma.profile.findMany({
+  const staffListRaw = await prisma.staff.findMany({
     where:   { tenantId: tenant.id, isActive: true },
-    select:  { id: true, displayName: true },
-    orderBy: { displayName: "asc" },
+    select:  { id: true, name: true },
+    orderBy: { name: "asc" },
   });
+  const staffList = staffListRaw.map(s => ({ id: s.id, displayName: s.name }));
 
   // 患者一覧（週間ビューの新規予約モーダルのみ）
   const patientList = isWeekView
@@ -115,7 +149,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
       },
       include: {
         patient: { select: { id: true, displayName: true } },
-        staff:   { select: { displayName: true } },
+        staff:   { select: { name: true } },
       },
       orderBy: { startAt: "asc" },
     });
@@ -130,40 +164,67 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
       price:       a.price,
       patientId:   a.patient.id,
       patientName: a.patient.displayName,
-      staffName:   a.staff?.displayName ?? null,
+      staffName:   a.staff?.name ?? null,
       note:        a.note ?? null,
     }));
   }
 
   // ── リストビュー用データ ──────────────────────────────────────
   let listAppointments: Awaited<ReturnType<typeof prisma.appointment.findMany<{
-    include: { patient: { select: { id: true; displayName: true } }; staff: { select: { displayName: true } } };
+    include: { patient: { select: { id: true; displayName: true } }; staff:   { select: { name: true } } };
   }>>> = [];
   let confirmedCount = 0;
   let archiveCount   = 0;
 
   if (!isWeekView) {
+    // endAt は @db.Timestamptz（UTC保存）。new Date() も UTC のため、
+    // JST 変換なしに直接比較して正確な時刻判定が可能。
+    const now = new Date();
+
+    // 「確定済み」カウント: confirmed かつ endAt が現在より未来
+    // 「完了・過去」カウント: completed/cancelled/no_show + 終了済みの confirmed
     [confirmedCount, archiveCount] = await Promise.all([
-      prisma.appointment.count({ where: { tenantId: tenant.id, status: "confirmed" } }),
-      prisma.appointment.count({ where: { tenantId: tenant.id, status: { in: ["completed", "cancelled", "no_show"] } } }),
+      prisma.appointment.count({
+        where: { tenantId: tenant.id, status: "confirmed", endAt: { gt: now } },
+      }),
+      prisma.appointment.count({
+        where: {
+          tenantId: tenant.id,
+          OR: [
+            { status: { in: ["completed", "cancelled", "no_show"] } },
+            { status: "confirmed", endAt: { lte: now } },
+          ],
+        },
+      }),
     ]);
 
-    const whereStatus: AppointmentStatus[] =
-      activeTab === "pending"   ? ["pending"] :
-      activeTab === "confirmed" ? ["confirmed"] :
-      ["completed", "cancelled", "no_show"];
-
-    listAppointments = await prisma.appointment.findMany({
-      where: {
-        tenantId: tenant.id, // CLAUDE.md 絶対ルール
-        status:   { in: whereStatus },
-      },
-      include: {
-        patient: { select: { id: true, displayName: true } },
-        staff:   { select: { displayName: true } },
-      },
-      orderBy: { startAt: activeTab === "archive" ? "desc" : "asc" },
-    });
+    if (activeTab === "pending") {
+      listAppointments = await prisma.appointment.findMany({
+        where:   { tenantId: tenant.id, status: "pending" },
+        include: { patient: { select: { id: true, displayName: true } }, staff: { select: { name: true } } },
+        orderBy: { startAt: "asc" },
+      });
+    } else if (activeTab === "confirmed") {
+      // 終了時刻が未来の confirmed のみ表示
+      listAppointments = await prisma.appointment.findMany({
+        where:   { tenantId: tenant.id, status: "confirmed", endAt: { gt: now } },
+        include: { patient: { select: { id: true, displayName: true } }, staff: { select: { name: true } } },
+        orderBy: { startAt: "asc" },
+      });
+    } else {
+      // 完了・過去: completed/cancelled/no_show + 終了済みの confirmed
+      listAppointments = await prisma.appointment.findMany({
+        where: {
+          tenantId: tenant.id,
+          OR: [
+            { status: { in: ["completed", "cancelled", "no_show"] } },
+            { status: "confirmed", endAt: { lte: now } },
+          ],
+        },
+        include: { patient: { select: { id: true, displayName: true } }, staff: { select: { name: true } } },
+        orderBy: { startAt: "desc" },
+      });
+    }
   }
 
   return (
@@ -233,6 +294,10 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
           maxCapacity={tenant.maxCapacity}
           staffList={staffList}
           patientList={patientList}
+          services={services}
+          exercises={exercises}
+          isProfessional={isProfessional}
+          trainingEnabled={trainingEnabled}
         />
       )}
 
@@ -309,7 +374,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
                 note:        appt.note,
                 patientId:   appt.patient.id,
                 patientName: appt.patient.displayName,
-                staffName:   appt.staff?.displayName ?? null,
+                staffName:   appt.staff?.name ?? null,
               }))}
               slug={slug}
               tenantId={tenant.id}
@@ -334,7 +399,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
                   note:        appt.note,
                   patientId:   appt.patient.id,
                   patientName: appt.patient.displayName,
-                  staffName:   appt.staff?.displayName ?? null,
+                  staffName:   appt.staff?.name ?? null,
                 };
                 return (
                   <AppointmentListCard
@@ -349,6 +414,10 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
                     lunchStartTime={tenant.lunchStartTime}
                     lunchEndTime={tenant.lunchEndTime}
                     slotInterval={tenant.slotInterval}
+                    services={services}
+                    exercises={exercises}
+                    isProfessional={isProfessional}
+                    trainingEnabled={trainingEnabled}
                   />
                 );
               })}

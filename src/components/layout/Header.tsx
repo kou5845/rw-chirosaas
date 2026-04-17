@@ -11,7 +11,7 @@ function resolvePageTitle(pathname: string): { label: string; sub?: string } {
     appointments: { label: "予約一覧",       sub: "予約の確認・承認・管理" },
     patients:     { label: "患者管理",       sub: "患者情報の登録・編集" },
     karte:        { label: "カルテ",         sub: "施術記録の入力・参照" },
-    training:     { label: "トレーニング管理", sub: "種目マスタ・実施記録" },
+    training:     { label: "トレーニングメニュー管理", sub: "種目マスタ・実施記録" },
     settings:     { label: "設定",           sub: "テナント設定・フィーチャートグル" },
   };
   return map[segment] ?? { label: segment };

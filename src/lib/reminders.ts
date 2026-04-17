@@ -2,10 +2,13 @@
  * 24時間前リマインダー送信ロジック
  *
  * 処理フロー:
- *   1. 現在時刻から 23〜24 時間後に開始される confirmed 予約を取得
+ *   1. 現在時刻から 23〜25 時間後に開始される confirmed 予約を取得
  *      （reminderSent=false のもののみ）
+ *      ※ ウィンドウを2時間幅にすることで、Cronが1回遅延・失敗しても
+ *         隣接するランがフォールバックとして機能する（reminderSent で二重送信防止）
  *   2. テナントの通知設定を確認
- *      - lineEnabled=true かつ patient.lineUserId あり → LINE でリマインダー送信
+ *      - lineEnabled=true かつ patient.lineUserId あり → 当該テナントの LINE チャネルで送信
+ *        （tenant.lineChannelAccessToken → 環境変数 LINE_CHANNEL_ACCESS_TOKEN の順でフォールバック）
  *      - emailEnabled=true かつ patient.email あり   → メールでリマインダー送信
  *   3. 送信成功後、appointment.reminderSent を true に更新（二重送信防止）
  *
@@ -14,9 +17,11 @@
  *   - tenantId フィルタなしで全テナントを横断処理する（システムバッチの設計上の例外）
  */
 
-import { prisma }             from "@/lib/prisma";
-import { pushText, buildReminder24hMessage } from "@/lib/line";
-import { sendReminderEmail }  from "@/lib/email";
+import { prisma }                       from "@/lib/prisma";
+import { messagingApi }                 from "@line/bot-sdk";
+import { buildReminder24hMessage }      from "@/lib/line";
+import { sendReminderEmail }            from "@/lib/email";
+import { buildMypageUrl }               from "@/lib/mypage";
 
 // 1バッチあたりの最大処理件数（タイムアウト防止）
 const BATCH_LIMIT = 50;
@@ -26,6 +31,8 @@ export type ReminderResult = {
   sent:      number;
   failed:    number;
   skipped:   number;
+  windowStart: string;
+  windowEnd:   string;
 };
 
 /**
@@ -33,14 +40,22 @@ export type ReminderResult = {
  * /api/cron/reminders から呼び出す。
  */
 export async function sendPendingReminders(): Promise<ReminderResult> {
-  const now        = new Date();
-  // 対象ウィンドウ: now+23h 〜 now+24h
+  const now = new Date();
+
+  // 対象ウィンドウ: now+23h 〜 now+25h（2時間幅）
+  // 幅を2時間にすることで、Cronが1回失敗した場合でも前後のランでリカバリー可能。
+  // reminderSent=false フィルタが二重送信を防ぐ。
   const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-  const windowEnd   = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const windowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+  console.log(
+    `[reminders] 実行開始 executedAt=${now.toISOString()} ` +
+    `window=[${windowStart.toISOString()}, ${windowEnd.toISOString()})`
+  );
 
   const appointments = await prisma.appointment.findMany({
     where: {
-      status:      "confirmed",
+      status:       "confirmed",
       reminderSent: false,
       startAt: {
         gte: windowStart,
@@ -50,12 +65,14 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
     include: {
       tenant: {
         select: {
-          id:          true,
-          name:        true,
-          phone:       true,
-          address:     true,
-          lineEnabled: true,
-          emailEnabled: true,
+          id:                     true,
+          name:                   true,
+          phone:                  true,
+          address:                true,
+          subdomain:              true,
+          lineEnabled:            true,
+          lineChannelAccessToken: true,   // テナント固有のLINEトークン
+          emailEnabled:           true,
         },
       },
       patient: {
@@ -63,6 +80,7 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
           displayName: true,
           lineUserId:  true,
           email:       true,
+          accessToken: true,
         },
       },
     },
@@ -70,14 +88,41 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
     orderBy: { startAt: "asc" },
   });
 
+  console.log(`[reminders] 対象予約: ${appointments.length}件`);
+
   if (appointments.length === 0) {
-    return { processed: 0, sent: 0, failed: 0, skipped: 0 };
+    return {
+      processed:   0,
+      sent:        0,
+      failed:      0,
+      skipped:     0,
+      windowStart: windowStart.toISOString(),
+      windowEnd:   windowEnd.toISOString(),
+    };
   }
 
-  const results: ReminderResult = { processed: appointments.length, sent: 0, failed: 0, skipped: 0 };
+  const results: ReminderResult = {
+    processed:   appointments.length,
+    sent:        0,
+    failed:      0,
+    skipped:     0,
+    windowStart: windowStart.toISOString(),
+    windowEnd:   windowEnd.toISOString(),
+  };
 
   for (const appt of appointments) {
     const { tenant, patient } = appt;
+
+    // テナント固有のLINEトークンを優先し、なければ共有環境変数にフォールバック
+    const lineChannelToken =
+      tenant.lineChannelAccessToken?.trim() ||
+      process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim() ||
+      null;
+
+    const mypageUrl = patient.accessToken && tenant.subdomain
+      ? buildMypageUrl(tenant.subdomain, patient.accessToken)
+      : null;
+
     const templateArgs = {
       tenantName:  tenant.name,
       patientName: patient.displayName,
@@ -88,21 +133,40 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
       endAt:       appt.endAt,
       phone:       tenant.phone,
       address:     tenant.address,
+      mypageUrl,
     };
 
-    let notified = false;
+    let lineSent  = false;
+    let emailSent = false;
 
     // ── LINE 通知 ──────────────────────────────────────────────
     if (tenant.lineEnabled && patient.lineUserId) {
-      try {
-        const text = buildReminder24hMessage(templateArgs);
-        await pushText(patient.lineUserId, text);
-        notified = true;
-      } catch (e) {
-        console.error(
-          `[reminders] LINE送信失敗 appointmentId=${appt.id}:`,
-          e instanceof Error ? e.message : e
+      if (!lineChannelToken) {
+        console.warn(
+          `[reminders] LINE設定なし（トークン未設定） ` +
+          `appointmentId=${appt.id} tenantId=${tenant.id}`
         );
+      } else {
+        try {
+          const lineClient = new messagingApi.MessagingApiClient({
+            channelAccessToken: lineChannelToken,
+          });
+          const text = buildReminder24hMessage(templateArgs);
+          await lineClient.pushMessage({
+            to:       patient.lineUserId,
+            messages: [{ type: "text", text }],
+          });
+          lineSent = true;
+          console.log(
+            `[reminders] LINE送信成功 appointmentId=${appt.id} ` +
+            `patientName=${patient.displayName} startAt=${appt.startAt.toISOString()}`
+          );
+        } catch (e) {
+          console.error(
+            `[reminders] LINE送信失敗 appointmentId=${appt.id}:`,
+            e instanceof Error ? e.message : e
+          );
+        }
       }
     }
 
@@ -120,8 +184,13 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
           endAt:       appt.endAt,
           phone:       tenant.phone,
           address:     tenant.address,
+          mypageUrl,
         });
-        notified = true;
+        emailSent = true;
+        console.log(
+          `[reminders] メール送信成功 appointmentId=${appt.id} ` +
+          `to=${patient.email}`
+        );
       } catch (e) {
         console.error(
           `[reminders] メール送信失敗 appointmentId=${appt.id}:`,
@@ -130,10 +199,17 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
       }
     }
 
+    const notified = lineSent || emailSent;
+
     if (!notified) {
-      // LINE未連携かつメール未設定 → スキップ（reminderSent は更新しない）
+      // 通知手段なし、または全チャネル送信失敗 → skipped（reminderSent は更新しない）
+      const reason =
+        (!tenant.lineEnabled && !tenant.emailEnabled)  ? "LINE・メール両方無効" :
+        (tenant.lineEnabled  && !patient.lineUserId)   ? "LINE有効だがlineUserId未設定" :
+        (tenant.emailEnabled && !patient.email)        ? "メール有効だがemail未設定" :
+        "全チャネル送信失敗";
       console.warn(
-        `[reminders] 通知手段なし appointmentId=${appt.id} ` +
+        `[reminders] 通知スキップ appointmentId=${appt.id} reason="${reason}" ` +
         `lineEnabled=${tenant.lineEnabled} lineUserId=${patient.lineUserId ?? "null"} ` +
         `emailEnabled=${tenant.emailEnabled} email=${patient.email ?? "null"}`
       );
@@ -141,21 +217,31 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
       continue;
     }
 
-    // 送信成功 → reminderSent を true に更新（二重送信防止）
+    // 1チャネル以上で送信成功 → reminderSent を true に更新（二重送信防止）
     try {
       await prisma.appointment.update({
         where: { id: appt.id },
         data:  { reminderSent: true },
       });
       results.sent++;
+      console.log(
+        `[reminders] reminderSent更新済 appointmentId=${appt.id} ` +
+        `(line=${lineSent} email=${emailSent})`
+      );
     } catch (e) {
       console.error(
-        `[reminders] reminderSent 更新失敗 appointmentId=${appt.id}:`,
+        `[reminders] reminderSent更新失敗 appointmentId=${appt.id}:`,
         e instanceof Error ? e.message : e
       );
+      // 送信は成功したが DB 更新失敗 → 次回のCronで再送される可能性あり（許容範囲）
       results.failed++;
     }
   }
+
+  console.log(
+    `[reminders] 完了 processed=${results.processed} ` +
+    `sent=${results.sent} failed=${results.failed} skipped=${results.skipped}`
+  );
 
   return results;
 }

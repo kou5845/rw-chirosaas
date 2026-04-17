@@ -23,9 +23,9 @@ import { calcAge, formatDateJa, formatPatientId, getInitial } from "@/lib/format
 import { cn } from "@/lib/utils";
 import { AppointmentSection } from "./AppointmentSection";
 import { PatientActions } from "./PatientActions";
+import { MypageShareSection } from "./MypageShareSection";
 import { KarteSection, type KarteForDisplay } from "./KarteSection";
-import type { ExerciseChartData } from "./TrainingAnalysisTab";
-import { createSupabaseAdmin, KARTE_MEDIA_BUCKET } from "@/lib/supabase";
+import { parseMetricsConfig, type BodyCompDataPoint } from "@/lib/training-metrics";
 
 type Props = {
   params: Promise<{ tenantId: string; patientId: string }>;
@@ -60,7 +60,7 @@ export default async function PatientDetailPage({ params }: Props) {
   // テナントを解決（昼休みも取得）
   const tenant = await prisma.tenant.findUnique({
     where:  { subdomain: slug },
-    select: { id: true, name: true, lunchStartTime: true, lunchEndTime: true, slotInterval: true },
+    select: { id: true, name: true, lunchStartTime: true, lunchEndTime: true, slotInterval: true, trainingMetricsConfig: true },
   });
   if (!tenant) notFound();
 
@@ -69,6 +69,21 @@ export default async function PatientDetailPage({ params }: Props) {
     where: {
       id:       patientId,
       tenantId: tenant.id, // ← 他テナントへのアクセスをここで遮断する
+    },
+    select: {
+      id:              true,
+      displayName:     true,
+      nameKana:        true,
+      phone:           true,
+      email:           true,
+      birthDate:       true,
+      lineUserId:      true,
+      accessToken:     true, // マイページ共有用
+      emergencyContact: true,
+      memo:            true,
+      isActive:        true,
+      createdAt:       true,
+      heightCm:        true,
     },
   });
   if (!patient) notFound();
@@ -103,7 +118,14 @@ export default async function PatientDetailPage({ params }: Props) {
       bodyParts:         true,
       treatments:        true,
       createdAt:         true,
-      staff:             { select: { displayName: true } },
+      staff:             { select: { name: true } },
+      weight:      true,
+      bodyFat:     true,
+      bmi:         true,
+      muscleMass:  true,
+      bmr:         true,
+      visceralFat: true,
+      bodyCompValues: true,
       exerciseRecords: {
         select: {
           id:          true,
@@ -125,103 +147,62 @@ export default async function PatientDetailPage({ params }: Props) {
     orderBy: { createdAt: "desc" },
   });
 
-  // ── 署名付きURLの一括生成（メディアがある場合）─────────────────────
-  // 1時間有効。Supabaseは1回100件まで署名可能なのでチャンク化して取得する
-  const allMediaPaths = kartes.flatMap((k) => k.media.map((m) => m.storagePath));
-  const signedUrlMap = new Map<string, string>();
-  
-  if (allMediaPaths.length > 0) {
-    const supabase = createSupabaseAdmin();
-    for (let i = 0; i < allMediaPaths.length; i += 100) {
-      const chunk = allMediaPaths.slice(i, i + 100);
-      const { data, error } = await supabase.storage
-        .from(KARTE_MEDIA_BUCKET)
-        .createSignedUrls(chunk, 60 * 60);
-      
-      if (!error && data) {
-        // 返却された配列は入力配列と同じ順序
-        for (let j = 0; j < chunk.length; j++) {
-          const item = data[j];
-          if (item && item.signedUrl) {
-            signedUrlMap.set(chunk[j], item.signedUrl);
-          }
-        }
-      }
-    }
-  }
+  // メディアは /api/media/[mediaId] Route Handler 経由でオンデマンドに署名付きURLを取得する
+  // （ページロード時の一括生成は廃止: URL期限切れ・生成失敗の問題を根本解決）
+  const kartesWithUrls = kartes;
 
-  // 生成したURLをマージ
-  const kartesWithUrls = kartes.map((k) => ({
-    ...k,
-    media: k.media.map((m) => ({
-      ...m,
-      signedUrl: signedUrlMap.get(m.storagePath) ?? null,
-    })),
-  }));
-
-  // ── トレーニング分析グラフ用データ集計（training_record が有効な場合のみ）──
+  // ── 体組成グラフ用データ集計（training_record が有効な場合のみ）──
   // CLAUDE.md 規約: ビジネスロジックは Server Component で処理する
-  const exerciseChartData: ExerciseChartData[] = [];
+  const bodyCompData: BodyCompDataPoint[] = [];
   if (trainingEnabled) {
-    // exerciseId → { name, category, records[] } のマップを構築
-    const exerciseMap = new Map<string, ExerciseChartData>();
-
-    for (const karte of kartes) {
-      const dateStr = karte.createdAt.toISOString().split("T")[0]; // "YYYY-MM-DD"
-      const dateLabel = dateStr.slice(5).replace("-", "/"); // "MM/DD"
-
-      for (const rec of karte.exerciseRecords) {
-        const exId   = rec.exercise.name; // 名前をキーにする（同名＝同種目として集計）
-        const wKg    = rec.weightKg ? Number(rec.weightKg) : 0;
-        const reps   = rec.reps    ?? 0;
-        const sets   = rec.sets    ?? 0;
-
-        // 総ボリューム: 重量 × 回数 × セット数
-        const volume = wKg * reps * sets;
-
-        // 1RM推定（Epley式）: weight × (1 + reps / 30)
-        const orm = reps > 0 && wKg > 0
-          ? Math.round(wKg * (1 + reps / 30) * 10) / 10
-          : 0;
-
-        if (!exerciseMap.has(exId)) {
-          exerciseMap.set(exId, {
-            exerciseId:   exId,
-            exerciseName: rec.exercise.name,
-            category:     rec.exercise.category,
-            records:      [],
-          });
+    const points = kartes
+      .filter((k) => k.karteType === "TRAINING")
+      .filter((k) =>
+        k.weight != null || k.bodyFat != null || k.bmi != null ||
+        k.muscleMass != null || k.bmr != null || k.visceralFat != null ||
+        (k.bodyCompValues && typeof k.bodyCompValues === 'object' && Object.keys(k.bodyCompValues).length > 0)
+      )
+      .map((k) => {
+        const dateStr   = k.createdAt.toISOString().split("T")[0]; // "YYYY-MM-DD"
+        const dateLabel = dateStr.slice(5).replace("-", "/");       // "MM/DD"
+        
+        let customValues = {};
+        if (k.bodyCompValues && typeof k.bodyCompValues === 'object') {
+          customValues = k.bodyCompValues as Record<string, number>;
         }
 
-        exerciseMap.get(exId)!.records.push({
-          date:      dateStr,
+        return {
+          ...customValues,
+          date:        dateStr,
           dateLabel,
-          volume:    Math.round(volume * 10) / 10,
-          orm,
-          sets:      rec.sets,
-          reps:      rec.reps,
-          weightKg:  wKg > 0 ? wKg : null,
-        });
-      }
-    }
-
-    // 日付昇順にソートして配列へ
-    for (const data of exerciseMap.values()) {
-      data.records.sort((a, b) => a.date.localeCompare(b.date));
-      exerciseChartData.push(data);
-    }
-
-    // 種目名でアルファベット昇順ソート
-    exerciseChartData.sort((a, b) => a.exerciseName.localeCompare(b.exerciseName));
+          weight:      k.weight,
+          bodyFat:     k.bodyFat,
+          bmi:         k.bmi,
+          muscleMass:  k.muscleMass,
+          bmr:         k.bmr,
+          visceralFat: k.visceralFat,
+        };
+      })
+      .reverse(); // kartes は降順取得 → グラフ用に昇順へ
+    bodyCompData.push(...points);
   }
+
+  const metricsConfig = parseMetricsConfig(tenant.trainingMetricsConfig);
+
+  // ── Service マスタ取得（施術内容選択用: Simple/Professional 共通）──
+  const services = await prisma.service.findMany({
+    where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
+    select:  { id: true, name: true, duration: true, intervalMin: true, price: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
 
   // ── 種目マスタ取得（編集ダイアログ用: Professional + training_record 有効時のみ）──
   const exercises =
     isProfessional && trainingEnabled
       ? await prisma.exercise.findMany({
           where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
-          select:  { id: true, name: true, category: true, unit: true },
-          orderBy: [{ category: "asc" }, { name: "asc" }],
+          select:  { id: true, name: true, duration: true, intervalMin: true, price: true, category: true, unit: true },
+          orderBy: [{ sortOrder: "asc" }, { category: "asc" }, { name: "asc" }],
         })
       : [];
 
@@ -244,7 +225,7 @@ export default async function PatientDetailPage({ params }: Props) {
         menuName:    true,
         durationMin: true,
         price:       true,
-        staff:       { select: { displayName: true } },
+        staff:       { select: { name: true } },
       },
     }),
     // ステータス別集計
@@ -260,11 +241,11 @@ export default async function PatientDetailPage({ params }: Props) {
       select:  { startAt: true },
     }),
     // ダイアログ用スタッフ一覧
-    prisma.profile.findMany({
+    prisma.staff.findMany({
       where:   { tenantId: tenant.id, isActive: true },
-      select:  { id: true, displayName: true },
-      orderBy: { displayName: "asc" },
-    }),
+      select:  { id: true, name: true },
+      orderBy: { name: "asc" },
+    }).then(staffs => staffs.map(s => ({ id: s.id, displayName: s.name }))),
   ]);
 
   const totalAppts = appointmentCounts.reduce((s, r) => s + r._count.id, 0);
@@ -406,6 +387,17 @@ export default async function PatientDetailPage({ params }: Props) {
             )}
           </div>
 
+          {/* マイページ共有 */}
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <MypageShareSection
+              patientId={patient.id}
+              patientName={patient.displayName}
+              tenantId={tenant.id}
+              tenantSlug={slug}
+              accessToken={patient.accessToken}
+            />
+          </div>
+
           {/* 登録日 */}
           <p className="px-1 text-center text-xs text-gray-400">
             登録日: {formatDateJa(patient.createdAt)}
@@ -426,6 +418,10 @@ export default async function PatientDetailPage({ params }: Props) {
             lunchStartTime={tenant.lunchStartTime}
             lunchEndTime={tenant.lunchEndTime}
             slotInterval={tenant.slotInterval}
+            services={services}
+            exercises={exercises}
+            isProfessional={isProfessional}
+            trainingEnabled={trainingEnabled}
           />
 
           {/* ── カルテ履歴セクション（タブ切り替え対応）── */}
@@ -437,8 +433,11 @@ export default async function PatientDetailPage({ params }: Props) {
             patientId={patient.id}
             patientName={patient.displayName}
             tenantId={tenant.id}
+            services={services}
             exercises={exercises}
-            exerciseChartData={exerciseChartData}
+            bodyCompData={bodyCompData}
+            metricsConfig={metricsConfig}
+            patientHeightCm={patient.heightCm}
           />
         </main>
       </div>

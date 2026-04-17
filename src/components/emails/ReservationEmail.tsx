@@ -49,6 +49,8 @@ export type ReservationEmailProps = {
   /** type="update" 時の変更前日時 */
   oldStartAt?:   Date | null;
   oldEndAt?:     Date | null;
+  /** 患者専用マイページURL（confirmation / reminder 時にメール末尾に表示） */
+  mypageUrl?:    string | null;
 };
 
 export function ReservationEmail({
@@ -65,6 +67,7 @@ export function ReservationEmail({
   staticMapUrl,
   oldStartAt,
   oldEndAt,
+  mypageUrl,
 }: ReservationEmailProps) {
   const isConfirmation = type === "confirmation";
   const isReminder     = type === "reminder";
@@ -325,6 +328,43 @@ export function ReservationEmail({
                                   </td>
                                 </tr>
                               )}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* ── マイページリンク（confirmation / reminder のみ）── */}
+                    {mypageUrl && (isConfirmation || isReminder) && (
+                      <tr>
+                        <td style={{ padding: "0 32px 24px" }}>
+                          <table width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: "#EFF6FF", borderRadius: 10, border: "1px solid #BFDBFE", overflow: "hidden" }}>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: "16px 20px" }}>
+                                  <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: "bold", color: "#1D4ED8" }}>
+                                    📋 患者専用マイページ
+                                  </p>
+                                  <p style={{ margin: "0 0 10px", fontSize: 12, color: "#374151", lineHeight: 1.6 }}>
+                                    施術記録・予約履歴をいつでもご確認いただけます。
+                                  </p>
+                                  <a
+                                    href={mypageUrl}
+                                    style={{
+                                      display:         "inline-block",
+                                      backgroundColor: BRAND,
+                                      color:           "#ffffff",
+                                      fontSize:        12,
+                                      fontWeight:      "bold",
+                                      padding:         "8px 16px",
+                                      borderRadius:    8,
+                                      textDecoration:  "none",
+                                    }}
+                                  >
+                                    マイページを開く →
+                                  </a>
+                                </td>
+                              </tr>
                             </tbody>
                           </table>
                         </td>

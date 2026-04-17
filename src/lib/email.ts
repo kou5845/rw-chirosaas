@@ -36,7 +36,8 @@ export type SendReservationEmailParams = ReservationEmailProps & {
 };
 
 export type SendReminderEmailParams = Omit<ReservationEmailProps, "type"> & {
-  to: string;
+  to:        string;
+  mypageUrl?: string | null;
 };
 
 /**

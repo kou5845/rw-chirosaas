@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { messagingApi } from "@line/bot-sdk";
 import { buildReceptionMessage, buildConfirmationMessage } from "@/lib/line";
 import { sendReservationEmail } from "@/lib/email";
+import { ensurePatientAccessToken, buildMypageUrl } from "@/lib/mypage";
 
 // ── 型定義 ──────────────────────────────────────────────────────────
 
@@ -255,7 +256,7 @@ export async function updateReservationStatus(
       startAt:     true,
       endAt:       true,
       patient: {
-        select: { displayName: true, lineUserId: true, email: true },
+        select: { displayName: true, lineUserId: true, email: true, accessToken: true },
       },
     },
   });
@@ -266,7 +267,7 @@ export async function updateReservationStatus(
 
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
-    select: { name: true, phone: true, address: true, lineChannelAccessToken: true, lineEnabled: true, emailEnabled: true },
+    select: { name: true, phone: true, address: true, subdomain: true, lineChannelAccessToken: true, lineEnabled: true, emailEnabled: true },
   });
   if (!tenant) {
     return { success: false, error: "テナントが見つかりません。" };
@@ -301,7 +302,19 @@ export async function updateReservationStatus(
     return { success: false, error: "承認処理中にエラーが発生しました。" };
   }
 
-  // ── 3. 確定通知（lineEnabled / emailEnabled フラグに従って送信）──
+  // ── 3. マイページURL構築（確定通知に添付する）────────────────────
+  let mypageUrl: string | null = null;
+  try {
+    const token = appointment.patient.accessToken
+      ?? await ensurePatientAccessToken(appointment.patientId, tenantId);
+    if (tenant.subdomain) {
+      mypageUrl = buildMypageUrl(tenant.subdomain, token);
+    }
+  } catch (e) {
+    console.error("[reservationService] mypageUrl 構築失敗:", e);
+  }
+
+  // ── 4. 確定通知（lineEnabled / emailEnabled フラグに従って送信）──
   // 送信失敗は予約確定の成否に影響させない
 
   // ── LINE 確定通知 ──
@@ -322,6 +335,7 @@ export async function updateReservationStatus(
           endAt:       appointment.endAt,
           phone:   tenant.phone,
           address: tenant.address,
+          mypageUrl,
         });
         await client.pushMessage({
           to:       appointment.patient.lineUserId,
@@ -340,6 +354,7 @@ export async function updateReservationStatus(
   console.log("  tenant.emailEnabled:", tenant.emailEnabled);
   console.log("  patient.email:", appointment.patient.email ?? "(未設定)");
   console.log("  patient.lineUserId:", appointment.patient.lineUserId ?? "(未設定)");
+  console.log("  mypageUrl:", mypageUrl ?? "(未生成)");
   // ── [DEBUG END] ────────────────────────────────────────────────
 
   // ── メール確定通知 ──
@@ -357,6 +372,7 @@ export async function updateReservationStatus(
         endAt:       appointment.endAt,
         phone:   tenant.phone,
         address: tenant.address,
+        mypageUrl,
       });
       console.log(`[reservationService] メール確定通知送信: appointmentId=${appointmentId}`);
     } catch (e) {

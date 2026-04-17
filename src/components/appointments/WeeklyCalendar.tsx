@@ -231,10 +231,12 @@ function calcApptStyle(
   totalCols: number,
   gridStartHour: number,
 ) {
-  const start    = new Date(appt.startAt);
-  const startMin = start.getHours() * 60 + start.getMinutes() - gridStartHour * 60;
-  const top      = (startMin / 60) * HOUR_HEIGHT;
-  const height   = Math.max((appt.durationMin / 60) * HOUR_HEIGHT - 4, 28);
+  const start      = new Date(appt.startAt);
+  const end        = new Date(appt.endAt);
+  const startMin   = start.getHours() * 60 + start.getMinutes() - gridStartHour * 60;
+  const blockMin   = (end.getTime() - start.getTime()) / 60000; // 所要時間 + インターバル
+  const top        = (startMin / 60) * HOUR_HEIGHT;
+  const height     = Math.max((blockMin / 60) * HOUR_HEIGHT - 4, 28);
   const widthPct = 100 / totalCols;
   const leftPct  = colIndex * widthPct;
   return {
@@ -484,8 +486,13 @@ function DraggableApptCard({
             {appt.menuName}
           </p>
         )}
+        {!isShort && appt.staffName && (
+          <p className="truncate text-[10px] leading-tight text-gray-400">
+            {appt.staffName}
+          </p>
+        )}
         {!isShort && (
-          <p className={cn("mt-0.5 text-[10px] leading-none opacity-70", cfg.text)}>
+          <p className={cn("mt-0.5 text-[10px] leading-none opacity-60", cfg.text)}>
             {fmtTime(appt.startAt)}〜
           </p>
         )}

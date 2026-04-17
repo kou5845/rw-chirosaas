@@ -66,24 +66,38 @@ type NotificationTemplateArgs = {
   endAt:       Date;
   phone?:      string | null;
   address?:    string | null;
+  /** 患者専用マイページURL（設定時はメッセージ末尾に案内を追加する） */
+  mypageUrl?:  string | null;
 };
 
 /** 曜日ラベル */
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"] as const;
 
+/**
+ * UTC の Date を JST 基準で "M月D日(曜)" にフォーマットする。
+ * Vercel サーバーのシステムタイムゾーンは UTC のため、
+ * getMonth/getDate/getDay を使うと日本時間と最大9時間ずれる。
+ * UTC ミリ秒に +9h オフセットを加えて UTC メソッドで取り出すことで
+ * タイムゾーン設定に依存しない安全な変換を行う。
+ */
 function fmtDate(d: Date): string {
-  return `${d.getMonth() + 1}月${d.getDate()}日(${WEEKDAYS[d.getDay()]})`;
+  const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return `${jst.getUTCMonth() + 1}月${jst.getUTCDate()}日(${WEEKDAYS[jst.getUTCDay()]})`;
 }
 
+/** UTC の Date を JST 基準で "HH:MM" にフォーマットする。 */
 function fmtTime(d: Date): string {
-  return d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const h   = String(jst.getUTCHours()).padStart(2, "0");
+  const m   = String(jst.getUTCMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 /**
  * 予約確定通知のメッセージ文字列を生成する。
  */
 export function buildConfirmationMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address } = args;
+  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address, mypageUrl } = args;
   const lines = [
     "【ご予約確定のお知らせ】",
     `${tenantName} のご予約が確定しました。`,
@@ -101,6 +115,14 @@ export function buildConfirmationMessage(args: NotificationTemplateArgs): string
   if (phone) {
     lines.push("", `変更・キャンセルはお電話にて承ります：${phone}`);
   }
+  if (mypageUrl) {
+    lines.push(
+      "",
+      "─────────────────",
+      "📋 施術記録・予約履歴はマイページからご確認いただけます",
+      mypageUrl,
+    );
+  }
   return lines.join("\n");
 }
 
@@ -108,8 +130,8 @@ export function buildConfirmationMessage(args: NotificationTemplateArgs): string
  * 24時間前リマインダーのメッセージ文字列を生成する。
  */
 export function buildReminder24hMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, startAt, endAt } = args;
-  return [
+  const { tenantName, menuName, durationMin, startAt, endAt, mypageUrl } = args;
+  const lines = [
     "【明日のご予約リマインダー】",
     `${tenantName} への明日のご予約をお知らせします。`,
     "",
@@ -118,7 +140,16 @@ export function buildReminder24hMessage(args: NotificationTemplateArgs): string 
     "",
     "お忘れなくご来院ください。",
     "変更・キャンセルの場合はお早めにご連絡ください。",
-  ].join("\n");
+  ];
+  if (mypageUrl) {
+    lines.push(
+      "",
+      "─────────────────",
+      "📋 本日の施術内容やこれまでの記録はマイページからご確認いただけます",
+      mypageUrl,
+    );
+  }
+  return lines.join("\n");
 }
 
 /**

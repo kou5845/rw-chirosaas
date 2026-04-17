@@ -74,7 +74,7 @@ export default async function DashboardPage({ params }: Props) {
       },
       include: {
         patient: { select: { displayName: true } },
-        staff:   { select: { displayName: true } },
+        staff:   { select: { name: true } },
       },
       orderBy: { startAt: "asc" },
       take: 8,
@@ -83,11 +83,11 @@ export default async function DashboardPage({ params }: Props) {
       where:  { tenantId: tenant.id },
       select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
     }),
-    prisma.profile.findMany({
+    prisma.staff.findMany({
       where:   { tenantId: tenant.id, isActive: true },
-      select:  { id: true, displayName: true },
-      orderBy: { displayName: "asc" },
-    }),
+      select:  { id: true, name: true },
+      orderBy: { name: "asc" },
+    }).then(staffs => staffs.map(s => ({ id: s.id, displayName: s.name }))),
   ]);
 
   const upcomingAppointments: DashboardAppointment[] = rawUpcoming.map((a) => ({
@@ -99,7 +99,7 @@ export default async function DashboardPage({ params }: Props) {
     price:       a.price,
     patientId:   a.patientId,
     patientName: a.patient.displayName,
-    staffName:   a.staff?.displayName ?? null,
+    staffName:   a.staff?.name ?? null,
     note:        a.note ?? null,
   }));
 

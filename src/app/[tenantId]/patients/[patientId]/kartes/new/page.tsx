@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { KarteNewForm } from "@/components/karte/KarteNewForm";
 import type { KarteMode } from "@prisma/client";
 import type { PreviousRecord } from "@/components/karte/TrainingRecordSection";
+import { parseMetricsConfig } from "@/lib/training-metrics";
 
 type Props = {
   params: Promise<{ tenantId: string; patientId: string }>;
@@ -25,14 +26,14 @@ export default async function KarteNewPage({ params }: Props) {
   // ── テナントをサブドメイン（スラッグ）で解決 ────────────────────
   const tenant = await prisma.tenant.findUnique({
     where:  { subdomain: slug },
-    select: { id: true, name: true },
+    select: { id: true, name: true, trainingMetricsConfig: true },
   });
   if (!tenant) notFound();
 
   // ── セキュリティ: 患者を tenantId + patientId で検索 ────────────
   const patient = await prisma.patient.findFirst({
-    where: { id: patientId, tenantId: tenant.id },
-    select: { id: true, displayName: true },
+    where:  { id: patientId, tenantId: tenant.id },
+    select: { id: true, displayName: true, heightCm: true },
   });
   if (!patient) notFound();
 
@@ -52,13 +53,20 @@ export default async function KarteNewPage({ params }: Props) {
   const trainingEnabled = trainingFeature?.featureValue === "true";
   const karteModeSnapshot: KarteMode = isProfessional ? "professional" : "simple";
 
+  // ── Service マスタ（施術内容選択に使用・Simple/Professional 共通）──
+  const services = await prisma.service.findMany({
+    where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
+    select:  { id: true, name: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+
   // ── トレーニング種目マスタ（unit フィールド含む）────────────────
   const exercises =
     isProfessional && trainingEnabled
       ? await prisma.exercise.findMany({
           where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
           select:  { id: true, name: true, category: true, unit: true },
-          orderBy: [{ category: "asc" }, { name: "asc" }],
+          orderBy: [{ sortOrder: "asc" }, { category: "asc" }, { name: "asc" }],
         })
       : [];
 
@@ -158,8 +166,11 @@ export default async function KarteNewPage({ params }: Props) {
         karteModeSnapshot={karteModeSnapshot}
         isProfessional={isProfessional}
         trainingEnabled={trainingEnabled}
+        services={services}
         exercises={exercises}
         previousRecords={previousRecords}
+        metricsConfig={parseMetricsConfig(tenant.trainingMetricsConfig)}
+        patientHeightCm={patient.heightCm}
       />
     </div>
   );

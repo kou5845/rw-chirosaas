@@ -100,15 +100,17 @@ export async function createPatient(
 
   try {
     // CLAUDE.md 絶対ルール: tenantId フィルタ必須
+    // accessToken を登録時に自動生成（マイページURL通知を即座に有効化）
     const patient = await prisma.patient.create({
       data: {
         tenantId,
         displayName,
         nameKana,
-        phone:     phone || null,
+        phone:       phone || null,
         email,
         birthDate,
-        isActive: true,
+        isActive:    true,
+        accessToken: crypto.randomUUID(),
       },
       select: { id: true },
     });

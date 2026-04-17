@@ -11,7 +11,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Pencil, Trash2, Loader2, UserCheck } from "lucide-react";
 import type { AppointmentStatus } from "@prisma/client";
-import { NewAppointmentDialog, type EditModeData, type BusinessHourData } from "@/components/appointments/NewAppointmentDialog";
+import { NewAppointmentDialog, type EditModeData, type BusinessHourData, type ServiceItem, type ExerciseItem } from "@/components/appointments/NewAppointmentDialog";
 import { deleteAppointment } from "@/app/[tenantId]/appointments/delete-action";
 import { AppointmentConfirmForm } from "@/components/appointments/AppointmentConfirmForm";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,10 @@ type Props = {
   lunchStartTime:   string | null;
   lunchEndTime:     string | null;
   slotInterval:     number;
+  services?:        ServiceItem[];
+  exercises?:       ExerciseItem[];
+  isProfessional?:  boolean;
+  trainingEnabled?: boolean;
   /** 一括承認モード: チェックボックスを表示する */
   selectable?:      boolean;
   selected?:        boolean;
@@ -89,6 +93,10 @@ export function AppointmentListCard({
   lunchStartTime,
   lunchEndTime,
   slotInterval,
+  services,
+  exercises,
+  isProfessional,
+  trainingEnabled,
   selectable    = false,
   selected      = false,
   onToggleSelect,
@@ -302,6 +310,10 @@ export function AppointmentListCard({
           lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           editMode={editModeData}
+          services={services}
+          exercises={exercises}
+          isProfessional={isProfessional}
+          trainingEnabled={trainingEnabled}
           onClose={() => setEditOpen(false)}
         />
       )}
