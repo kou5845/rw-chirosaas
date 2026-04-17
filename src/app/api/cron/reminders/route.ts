@@ -2,18 +2,13 @@
  * リマインダー Cron ルートハンドラー
  * URL: GET /api/cron/reminders
  *
- * Vercel Cron Jobs からの定期呼び出し（vercel.json で設定: 毎時0分）。
- * 手動実行時も Authorization: Bearer {CRON_SECRET} ヘッダーが必要。
- *
- * 処理フロー:
- *   1. 現在時刻から 23〜24 時間後に開始される confirmed 予約を取得
- *   2. lineEnabled=true かつ LINE連携済み → LINE でリマインダー送信
- *   3. emailEnabled=true かつ email あり  → メールでリマインダー送信
- *   4. 送信成功後、appointment.reminderSent = true に更新（二重送信防止）
+ * 認証方式（いずれか1つで通過）:
+ *   1. Vercel Cron 自動実行: Authorization: Bearer {CRON_SECRET} ヘッダー
+ *   2. 手動 / 外部サービス: ?key={CRON_SECRET} クエリパラメータ
+ *   3. CRON_SECRET 未設定: 開発環境（NODE_ENV !== "production"）のみ通過
  *
  * CLAUDE.md 規約:
  *   - Vercel Edge Runtime では pg/prisma が動作しないため nodejs runtime を明示
- *   - CRON_SECRET 未設定時は開発環境のみ通過（本番では必ず設定）
  */
 
 import { sendPendingReminders } from "@/lib/reminders";
@@ -21,15 +16,22 @@ import { sendPendingReminders } from "@/lib/reminders";
 export const runtime = "nodejs";
 
 function isAuthorized(request: Request): boolean {
-  const authHeader = request.headers.get("authorization");
-  const secret     = process.env.CRON_SECRET;
+  const secret = process.env.CRON_SECRET;
 
   if (!secret || secret === "[CRON_SECRET]") {
     console.warn("[cron/reminders] CRON_SECRET が未設定です。本番環境では必ず設定してください。");
     return process.env.NODE_ENV !== "production";
   }
 
-  return authHeader === `Bearer ${secret}`;
+  // Vercel Cron / curl 等: Authorization ヘッダー
+  const authHeader = request.headers.get("authorization");
+  if (authHeader === `Bearer ${secret}`) return true;
+
+  // ブラウザ / 外部サービス: ?key= クエリパラメータ
+  const url = new URL(request.url);
+  if (url.searchParams.get("key") === secret) return true;
+
+  return false;
 }
 
 export async function GET(request: Request) {

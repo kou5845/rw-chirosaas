@@ -26,18 +26,27 @@ export const runtime = "nodejs";
 // 1バッチあたりの最大処理件数
 const BATCH_LIMIT = 50;
 
-/** Authorization ヘッダーを検証する */
+/**
+ * 認証方式（いずれか1つで通過）:
+ *   1. Vercel Cron 自動実行: Authorization: Bearer {CRON_SECRET} ヘッダー
+ *   2. 手動 / 外部サービス: ?key={CRON_SECRET} クエリパラメータ
+ *   3. CRON_SECRET 未設定: 開発環境（NODE_ENV !== "production"）のみ通過
+ */
 function isAuthorized(request: Request): boolean {
-  const authHeader = request.headers.get("authorization");
   const secret = process.env.CRON_SECRET;
 
-  // CRON_SECRET が未設定の場合は開発環境とみなし通過させる（本番では必ず設定すること）
   if (!secret || secret === "[CRON_SECRET]") {
     console.warn("[cron/notifications] CRON_SECRET が未設定です。本番環境では必ず設定してください。");
     return process.env.NODE_ENV !== "production";
   }
 
-  return authHeader === `Bearer ${secret}`;
+  const authHeader = request.headers.get("authorization");
+  if (authHeader === `Bearer ${secret}`) return true;
+
+  const url = new URL(request.url);
+  if (url.searchParams.get("key") === secret) return true;
+
+  return false;
 }
 
 export async function GET(request: Request) {
