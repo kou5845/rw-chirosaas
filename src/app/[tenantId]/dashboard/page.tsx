@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { DashboardUpcomingList, type DashboardAppointment } from "./DashboardUpcomingList";
+import { DashboardPendingList, type PendingAppointment } from "./DashboardPendingList";
 
 type Props = {
   params: Promise<{ tenantId: string }>;
@@ -47,6 +48,7 @@ export default async function DashboardPage({ params }: Props) {
     pendingCount,
     todayCount,
     confirmedCount,
+    rawPending,
     rawUpcoming,
     rawHours,
     staffList,
@@ -66,10 +68,24 @@ export default async function DashboardPage({ params }: Props) {
     prisma.appointment.count({
       where: { tenantId: tenant.id, status: "confirmed" },
     }),
+    // 承認待ち一覧（全件・日時昇順）
     prisma.appointment.findMany({
       where: {
         tenantId: tenant.id,
-        status:   { in: ["pending", "confirmed"] },
+        status:   "pending",
+      },
+      include: {
+        patient: { select: { displayName: true } },
+        staff:   { select: { name: true } },
+      },
+      orderBy: { startAt: "asc" },
+      take: 20,
+    }),
+    // 直近の確定済み予約（今日以降・日時昇順）
+    prisma.appointment.findMany({
+      where: {
+        tenantId: tenant.id,
+        status:   "confirmed",
         startAt:  { gte: today },
       },
       include: {
@@ -89,6 +105,16 @@ export default async function DashboardPage({ params }: Props) {
       orderBy: { name: "asc" },
     }).then(staffs => staffs.map(s => ({ id: s.id, displayName: s.name }))),
   ]);
+
+  const pendingAppointments: PendingAppointment[] = rawPending.map((a) => ({
+    id:          a.id,
+    startAt:     a.startAt.toISOString(),
+    durationMin: a.durationMin,
+    menuName:    a.menuName,
+    patientId:   a.patientId,
+    patientName: a.patient.displayName,
+    staffName:   a.staff?.name ?? null,
+  }));
 
   const upcomingAppointments: DashboardAppointment[] = rawUpcoming.map((a) => ({
     id:          a.id,
@@ -183,7 +209,16 @@ export default async function DashboardPage({ params }: Props) {
         })}
       </div>
 
-      {/* ── 直近の予約一覧 ── */}
+      {/* ── 承認待ちセクション（pending が 1 件以上ある場合のみ表示）── */}
+      {pendingAppointments.length > 0 && (
+        <DashboardPendingList
+          tenantId={tenant.id}
+          tenantSlug={slug}
+          appointments={pendingAppointments}
+        />
+      )}
+
+      {/* ── 直近の確定済み予約一覧 ── */}
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
         {/* テーブルヘッダー */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
