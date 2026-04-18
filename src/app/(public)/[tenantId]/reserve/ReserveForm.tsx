@@ -576,16 +576,22 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
         <label htmlFor="reserve-kana" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
           <User size={14} className="text-gray-400" />
           ふりがな
-          <span className="ml-1 text-xs font-normal text-gray-400">任意</span>
+          <span className="ml-1 text-xs font-normal text-red-500">必須</span>
         </label>
         <input
           id="reserve-kana"
           name="nameKana"
           type="text"
+          required
           autoComplete="off"
           placeholder="やまだ たろう"
-          className={inputCls}
+          className={inputCls + (errors?.nameKana ? " border-red-300 bg-red-50/50" : "")}
         />
+        {errors?.nameKana && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+            <AlertCircle size={11} />{errors.nameKana}
+          </p>
+        )}
       </div>
 
       {/* 電話番号 */}
