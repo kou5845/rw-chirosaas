@@ -57,38 +57,38 @@ export default async function SettingsPage({ params }: Props) {
   });
   if (!tenant) notFound();
 
-  // トレーニング記録フィーチャートグルを確認
-  const karteFeature = await prisma.tenantSetting.findUnique({
-    where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" } },
-    select: { featureValue: true },
-  });
-  const isProfessional = karteFeature?.featureValue === "professional";
-
-  const trainingFeature = await prisma.tenantSetting.findUnique({
-    where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "training_record" } },
-    select: { featureValue: true },
-  });
+  // ── 独立クエリを並列実行 ──
+  const loginId = session?.user?.loginId ?? "";
+  const [karteFeature, trainingFeature, rawHours, user] = await Promise.all([
+    prisma.tenantSetting.findUnique({
+      where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" } },
+      select: { featureValue: true },
+    }),
+    prisma.tenantSetting.findUnique({
+      where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "training_record" } },
+      select: { featureValue: true },
+    }),
+    prisma.businessHour.findMany({
+      where:   { tenantId: tenant.id },
+      select:  { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
+      orderBy: { dayOfWeek: "asc" },
+    }),
+    loginId
+      ? prisma.user.findUnique({ where: { loginId }, select: { email: true } })
+      : Promise.resolve(null),
+  ]);
+  const isProfessional  = karteFeature?.featureValue === "professional";
   const trainingEnabled = trainingFeature?.featureValue === "true";
 
-  const staffs = isProfessional ? await prisma.staff.findMany({ where: { tenantId: tenant.id, isActive: true }, orderBy: { name: "asc" } }) : [];
-  const metricsConfig   = parseMetricsConfig(tenant.trainingMetricsConfig);
-
-  // 曜日別営業時間（全7曜日）
-  const rawHours = await prisma.businessHour.findMany({
-    where:   { tenantId: tenant.id },
-    select:  { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
-    orderBy: { dayOfWeek: "asc" },
-  });
-  const businessHours: BusinessHourData[] = rawHours;
-
-  // ログイン中ユーザーの資格情報
-  const loginId = session?.user?.loginId ?? "";
-  const user    = loginId
-    ? await prisma.user.findUnique({
-        where:  { loginId },
-        select: { email: true },
+  const staffs = isProfessional
+    ? await prisma.staff.findMany({
+        where:   { tenantId: tenant.id, isActive: true },
+        orderBy: { name: "asc" },
+        select:  { id: true, name: true, role: true },
       })
-    : null;
+    : [];
+  const metricsConfig    = parseMetricsConfig(tenant.trainingMetricsConfig);
+  const businessHours: BusinessHourData[] = rawHours;
 
   // 予約URL
   const appUrl        = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
