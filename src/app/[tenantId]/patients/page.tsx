@@ -39,44 +39,38 @@ export default async function PatientsPage({ params, searchParams }: Props) {
   if (!tenant) notFound();
 
   // ── 患者一覧取得（CLAUDE.md 絶対ルール: tenantId フィルタ必須）──
-  const patients = await prisma.patient.findMany({
-    where: {
-      tenantId: tenant.id,
-      isActive: true,
-      ...(q
-        ? {
-            OR: [
-              { displayName: { contains: q, mode: "insensitive" } },
-              { nameKana:    { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    },
-    include: {
-      // 最終来院日: 完了済み予約の中で最新のもの
-      appointments: {
-        where:   { tenantId: tenant.id, status: "completed" },
-        orderBy: { startAt: "desc" },
-        take:    1,
-        select:  { startAt: true },
+  const patientWhere = {
+    tenantId: tenant.id,
+    isActive: true,
+    ...(q
+      ? {
+          OR: [
+            { displayName: { contains: q, mode: "insensitive" as const } },
+            { nameKana:    { contains: q, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+
+  const [patients, totalCount] = await Promise.all([
+    prisma.patient.findMany({
+      where: patientWhere,
+      include: {
+        // 最終来院日: 完了済み予約の中で最新のもの
+        appointments: {
+          where:   { tenantId: tenant.id, status: "completed" },
+          orderBy: { startAt: "desc" },
+          take:    1,
+          select:  { startAt: true },
+        },
+        _count: { select: { appointments: true } },
       },
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
-  // 患者ごとの予約件数（全ステータス）
-  const appointmentCounts = await prisma.appointment.groupBy({
-    by:     ["patientId"],
-    where:  { tenantId: tenant.id },
-    _count: { id: true },
-  });
-  const countMap = new Map(
-    appointmentCounts.map((r) => [r.patientId, r._count.id])
-  );
-
-  const totalCount = await prisma.patient.count({
-    where: { tenantId: tenant.id, isActive: true },
-  });
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.patient.count({
+      where: { tenantId: tenant.id, isActive: true },
+    }),
+  ]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -148,7 +142,7 @@ export default async function PatientsPage({ params, searchParams }: Props) {
           <div className="divide-y divide-gray-50">
             {patients.map((patient, index) => {
               const lastVisit = patient.appointments[0]?.startAt ?? null;
-              const apptCount = countMap.get(patient.id) ?? 0;
+              const apptCount = patient._count.appointments;
               const hasLine   = !!patient.lineUserId;
 
               return (
