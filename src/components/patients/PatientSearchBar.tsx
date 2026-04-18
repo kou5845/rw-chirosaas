@@ -11,7 +11,7 @@ type Props = {
 
 export function PatientSearchBar({
   defaultValue = "",
-  placeholder = "患者名で検索...",
+  placeholder = "患者名・ふりがな・IDで検索...",
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();

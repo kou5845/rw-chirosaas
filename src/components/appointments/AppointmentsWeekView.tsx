@@ -34,7 +34,7 @@ import { deleteAppointment } from "@/app/[tenantId]/appointments/delete-action";
 // ─── 型定義 ──────────────────────────────────────────────────────────────────
 
 type Staff   = { id: string; displayName: string };
-type Patient = { id: string; displayName: string };
+type Patient = { id: string; displayName: string; nameKana: string | null };
 
 type Props = {
   weekStartStr:     string;

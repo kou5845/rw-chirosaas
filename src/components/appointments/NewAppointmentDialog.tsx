@@ -50,7 +50,7 @@ export type ExerciseItem = {
 };
 
 type Staff   = { id: string; displayName: string };
-type Patient = { id: string; displayName: string };
+type Patient = { id: string; displayName: string; nameKana: string | null };
 
 export type EditModeData = {
   appointmentId: string;
@@ -154,6 +154,12 @@ const errCls = "border-red-300 bg-red-50/50";
 
 // ── 患者検索 ─────────────────────────────────────────────────────────────────
 
+/** 患者選択後の表示ラベル: 氏名 / 読み仮名 / ID */
+function patientLabel(p: Patient): string {
+  const id = `#${p.id.slice(-6).toUpperCase()}`;
+  return p.nameKana ? `${p.displayName} / ${p.nameKana} / ${id}` : `${p.displayName} / ${id}`;
+}
+
 function PatientSelector({
   patientList,
   onSelect,
@@ -166,9 +172,17 @@ function PatientSelector({
   const [open,     setOpen]     = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const filtered = query.length === 0
-    ? patientList.slice(0, 30)
-    : patientList.filter((p) => p.displayName.includes(query)).slice(0, 30);
+  const filtered = (() => {
+    if (query.length === 0) return patientList.slice(0, 30);
+    // "#" 除去で ID 検索にも対応
+    const q       = query.toLowerCase();
+    const qNoHash = q.replace(/^#/, "");
+    return patientList.filter((p) =>
+      p.displayName.toLowerCase().includes(q) ||
+      (p.nameKana && p.nameKana.toLowerCase().includes(q)) ||
+      p.id.slice(-6).toLowerCase().includes(qNoHash)
+    ).slice(0, 30);
+  })();
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -181,7 +195,7 @@ function PatientSelector({
 
   function choose(p: Patient) {
     setSelected(p);
-    setQuery(p.displayName);
+    setQuery(patientLabel(p));
     setOpen(false);
     onSelect(p);
   }
@@ -189,7 +203,7 @@ function PatientSelector({
   function handleInput(v: string) {
     setQuery(v);
     setOpen(true);
-    if (selected && selected.displayName !== v) { setSelected(null); onSelect(null); }
+    if (selected && patientLabel(selected) !== v) { setSelected(null); onSelect(null); }
   }
 
   return (
@@ -197,7 +211,7 @@ function PatientSelector({
       <div className="relative mt-1.5">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
         <input
-          type="text" value={query} placeholder="患者名で検索…" autoComplete="off"
+          type="text" value={query} placeholder="患者名・ふりがな・IDで検索…" autoComplete="off"
           onChange={(e) => handleInput(e.target.value)}
           onFocus={() => setOpen(true)}
           className={`${inputCls} pl-9 pr-3 ${!selected && query ? errCls : ""}`}
@@ -209,11 +223,17 @@ function PatientSelector({
           {filtered.map((p) => (
             <button key={p.id} type="button"
               onMouseDown={(e) => { e.preventDefault(); choose(p); }}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-[var(--brand-bg)] hover:text-[var(--brand-dark)]">
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-[var(--brand-bg)]">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--brand-bg)] text-xs font-bold text-[var(--brand-dark)]">
                 {p.displayName.slice(0, 1)}
               </div>
-              {p.displayName}
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">{p.displayName}</p>
+                <p className="text-xs text-gray-400 truncate">
+                  {p.nameKana && <span className="mr-2">{p.nameKana}</span>}
+                  <span>#{p.id.slice(-6).toUpperCase()}</span>
+                </p>
+              </div>
             </button>
           ))}
         </div>

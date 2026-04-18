@@ -94,6 +94,7 @@ export async function submitPublicReservation(
   const dateStr       = (formData.get("date")          as string | null)?.trim() ?? "";
   const timeStr       = (formData.get("time")          as string | null)?.trim() ?? "";
   const name          = (formData.get("name")          as string | null)?.trim() ?? "";
+  const nameKana      = (formData.get("nameKana")      as string | null)?.trim() || null;
   const phone         = (formData.get("phone")         as string | null)?.trim() ?? "";
   const email         = (formData.get("email")         as string | null)?.trim() || null;
   const menuNameRaw   = (formData.get("menuName")      as string | null)?.trim() || null;
@@ -171,6 +172,7 @@ export async function submitPublicReservation(
       data: {
         tenantId:    tenant.id,
         displayName: name,
+        nameKana:    nameKana ?? undefined,
         phone:       phone,
         email:       email ?? undefined,
         accessToken: crypto.randomUUID(),

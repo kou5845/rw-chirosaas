@@ -44,7 +44,12 @@ export default async function PatientsPage({ params, searchParams }: Props) {
       tenantId: tenant.id,
       isActive: true,
       ...(q
-        ? { displayName: { contains: q, mode: "insensitive" } }
+        ? {
+            OR: [
+              { displayName: { contains: q, mode: "insensitive" } },
+              { nameKana:    { contains: q, mode: "insensitive" } },
+            ],
+          }
         : {}),
     },
     include: {
