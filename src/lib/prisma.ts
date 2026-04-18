@@ -14,7 +14,14 @@ import { PrismaPg } from "@prisma/adapter-pg";
 function buildConnectionString(): string {
   // DATABASE_URL を優先（本番 Vercel）
   const databaseUrl = process.env.DATABASE_URL ?? "";
-  if (databaseUrl) return databaseUrl;
+  if (databaseUrl) {
+    // PrismaPg は pg ライブラリを直接使うため、Prisma 固有の pgbouncer パラメータを除去する。
+    // pgbouncer=true / connection_limit=1 は Prisma 組み込みプール向けのフラグ。
+    const url = new URL(databaseUrl);
+    url.searchParams.delete("pgbouncer");
+    url.searchParams.delete("connection_limit");
+    return url.toString();
+  }
 
   // ローカル開発: DIRECT_URL をフォールバック
   return process.env.DIRECT_URL ?? "";
