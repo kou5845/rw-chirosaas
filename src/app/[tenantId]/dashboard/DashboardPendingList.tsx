@@ -59,7 +59,6 @@ export function DashboardPendingList({ tenantId, tenantSlug, appointments: initi
   const [deletingId,   setDeletingId]  = useState<string | null>(null);
   const [confirmId,    setConfirmId]   = useState<string | null>(null);
   const [error,        setError]       = useState<string | null>(null);
-  const [isPending,    startTransition] = useTransition();
 
   const [bulkApproving, setBulkApproving] = useState(false);
   const [bulkDeleting,  setBulkDeleting]  = useState(false);
