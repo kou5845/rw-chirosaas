@@ -211,13 +211,14 @@ function EditDialog({
           {/* ふりがな */}
           <div className="py-4">
             <label htmlFor="edit-nameKana" className="block text-sm font-medium text-gray-700">
-              ふりがな
-              <span className="ml-1.5 text-xs font-normal text-gray-400">任意</span>
+              ふりがな（ひらがな）
+              <span className="ml-1.5 text-xs font-normal text-red-500">必須</span>
             </label>
             <input
               id="edit-nameKana"
               name="nameKana"
               type="text"
+              placeholder="例: やまだ たろう"
               defaultValue={patient.nameKana ?? ""}
               className={cn(inputBase, errors?.nameKana ? inputError : inputNormal)}
             />

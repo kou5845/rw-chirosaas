@@ -58,7 +58,9 @@ export async function updatePatient(
     errors.displayName = "氏名は255文字以内で入力してください。";
   }
 
-  if (nameKana && !/^[ぁ-ん\s　]+$/.test(nameKana)) {
+  if (!nameKana) {
+    errors.nameKana = "ふりがなは必須です。";
+  } else if (!/^[ぁ-ん\s　]+$/.test(nameKana)) {
     errors.nameKana = "ふりがなはひらがなで入力してください。";
   }
 
