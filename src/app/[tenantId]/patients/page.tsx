@@ -46,9 +46,8 @@ export default async function PatientsPage({ params, searchParams }: Props) {
       ...(q
         ? {
             OR: [
-              { displayName: { contains: q,                mode: "insensitive" } },
-              { nameKana:    { contains: q,                mode: "insensitive" } },
-              { id:          { endsWith:  q.replace(/^#/, "").toLowerCase() } },
+              { displayName: { contains: q, mode: "insensitive" } },
+              { nameKana:    { contains: q, mode: "insensitive" } },
             ],
           }
         : {}),
