@@ -119,7 +119,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   const patientList = isWeekView
     ? await prisma.patient.findMany({
         where:   { tenantId: tenant.id },
-        select:  { id: true, displayName: true },
+        select:  { id: true, displayName: true, nameKana: true },
         orderBy: { displayName: "asc" },
       })
     : [];
