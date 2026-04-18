@@ -288,6 +288,11 @@ export default async function PatientDetailPage({ params }: Props) {
                     <p className="text-lg font-bold text-white">
                       {patient.displayName}
                     </p>
+                    {patient.nameKana && (
+                      <p className="mt-0.5 text-xs text-white/80">
+                        {patient.nameKana}
+                      </p>
+                    )}
                     {patient.birthDate && (
                       <p className="mt-0.5 text-xs text-white/80">
                         {calcAge(patient.birthDate)}歳
