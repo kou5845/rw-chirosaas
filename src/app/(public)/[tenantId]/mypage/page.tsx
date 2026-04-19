@@ -11,6 +11,7 @@
  *   - 全 Prisma クエリに tenantId を含めること
  */
 
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import {
@@ -73,6 +74,9 @@ export default async function MypageIndexPage({ params }: Props) {
     select: {
       id:          true,
       displayName: true,
+      nameKana:    true,
+      phone:       true,
+      email:       true,
       tenantId:    true,
       accessToken: true,
     },
@@ -183,6 +187,14 @@ export default async function MypageIndexPage({ params }: Props) {
   const metricsConfig  = parseMetricsConfig(tenant.trainingMetricsConfig);
   const nextConfirmed  = upcoming.find((a) => a.status === "confirmed");
 
+  // 予約フォームURL（患者情報をクエリパラメータで渡して自動入力）
+  const reserveParams = new URLSearchParams();
+  if (patient.displayName) reserveParams.set("name",  patient.displayName);
+  if (patient.nameKana)    reserveParams.set("kana",  patient.nameKana);
+  if (patient.phone)       reserveParams.set("phone", patient.phone);
+  if (patient.email)       reserveParams.set("email", patient.email);
+  const reserveUrl = `/${slug}/reserve?${reserveParams.toString()}`;
+
   function serializeAppt(a: (typeof allAppointments)[number]) {
     return {
       id: a.id, status: a.status,
@@ -277,6 +289,18 @@ export default async function MypageIndexPage({ params }: Props) {
             <p className="mt-1 text-xs text-gray-300">ご来院の際にスタッフにお声がけください</p>
           </div>
         )}
+      </div>
+
+      {/* ━━ 予約導線 ━━ */}
+      <div className="px-4 mt-3">
+        <Link
+          href={reserveUrl}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--brand-border)] bg-white py-3.5 text-sm font-semibold text-[var(--brand-dark)] shadow-sm transition-colors hover:bg-[var(--brand-bg)] active:bg-[var(--brand-bg)]"
+        >
+          <CalendarDays size={15} />
+          ご予約はこちら
+          <ChevronRight size={14} className="text-[var(--brand-medium)]" />
+        </Link>
       </div>
 
       <div className="space-y-4 px-4 pb-20 mt-4">
