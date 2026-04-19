@@ -33,6 +33,7 @@ enum AppointmentStatus {
   pending    // 仮受付（初期状態）
   confirmed  // 確定（承認済）
   cancelled  // キャンセル
+  rejected   // お断り（院都合で受付不可）
   no_show    // 無断欠席
   completed  // 施術完了
 }
@@ -72,6 +73,7 @@ enum NotificationType {
   reminder_24h  // リマインダー (24時間前)
   reminder_2h   // リマインダー (2時間前)
   cancellation  // キャンセル通知
+  rejection     // お断り通知（院都合）
 }
 
 enum NotificationStatus {
@@ -250,6 +252,7 @@ model Patient {
   birthDate        DateTime? @map("birth_date") @db.Date
   lineUserId       String?   @unique @map("line_user_id") @db.VarChar(64) // LINE ユーザーID
   accessToken      String?   @unique @map("access_token") @db.Uuid       // マイページ用マジックリンクトークン
+  accessPin        String?   @map("access_pin") @db.VarChar(4)           // マイページログイン用4桁PIN
   emergencyContact String?   @map("emergency_contact") @db.VarChar(255)
   heightCm         Float?    @map("height_cm")  // 身長 (cm): BMI 自動計算に使用
   memo             String?   // 院内メモ（患者非表示）

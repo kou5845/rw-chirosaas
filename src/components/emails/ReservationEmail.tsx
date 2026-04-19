@@ -6,6 +6,7 @@
  * - type="reminder"     → 24時間前リマインダーメール
  * - type="update"       → 予約日時変更通知メール
  * - type="cancel"       → 予約キャンセル通知メール
+ * - type="rejection"    → 予約お断り通知メール（院都合）
  *
  * Resend の `react` パラメータへそのまま渡せる React コンポーネント。
  * メールクライアントの互換性のため、スタイルはすべてインライン記述。
@@ -34,7 +35,7 @@ function fmtTimeJP(d: Date): string {
 }
 
 export type ReservationEmailProps = {
-  type:          "reception" | "confirmation" | "reminder" | "update" | "cancel";
+  type:          "reception" | "confirmation" | "reminder" | "update" | "cancel" | "rejection";
   tenantName:    string;
   patientName:   string;
   menuName:      string;
@@ -73,17 +74,20 @@ export function ReservationEmail({
   const isReminder     = type === "reminder";
   const isUpdate       = type === "update";
   const isCancel       = type === "cancel";
+  const isRejection    = type === "rejection";
 
   const headline =
-    isUpdate   ? "ご予約日時が変更されました" :
-    isCancel   ? "ご予約がキャンセルされました" :
-    isReminder ? "明日のご予約リマインダー" :
+    isUpdate     ? "ご予約日時が変更されました" :
+    isCancel     ? "ご予約がキャンセルされました" :
+    isRejection  ? "ご予約をお受けできませんでした" :
+    isReminder   ? "明日のご予約リマインダー" :
     isConfirmation ? "ご予約が確定しました" : "ご予約を受け付けました";
 
   const subText =
-    isUpdate   ? "以下のとおり予約日時が変更されました。ご確認ください。" :
-    isCancel   ? "以下のご予約がキャンセルされました。またのご利用をお待ちしております。" :
-    isReminder ? "明日のご予約のお時間が近づいてまいりました。ご来院をお待ちしております。" :
+    isUpdate     ? "以下のとおり予約日時が変更されました。ご確認ください。" :
+    isCancel     ? "以下のご予約がキャンセルされました。またのご利用をお待ちしております。" :
+    isRejection  ? "誠に申し訳ございませんが、以下のご予約をお受けすることができませんでした。" :
+    isReminder   ? "明日のご予約のお時間が近づいてまいりました。ご来院をお待ちしております。" :
     isConfirmation ? "以下の内容でご予約が確定しました。ご来院をお待ちしております。" :
     "以下の内容でご予約を受け付けました。スタッフ確認後、確定のご連絡をお送りします。";
 
@@ -123,12 +127,12 @@ export function ReservationEmail({
                     {/* ── ステータスバナー ── */}
                     <tr>
                       <td style={{
-                        backgroundColor: isUpdate ? "#EFF6FF" : isCancel ? "#FEF2F2" : isReminder ? "#FFFBEB" : isConfirmation ? "#ECFDF5" : BG,
+                        backgroundColor: isUpdate ? "#EFF6FF" : (isCancel || isRejection) ? "#FEF2F2" : isReminder ? "#FFFBEB" : isConfirmation ? "#ECFDF5" : BG,
                         padding: "20px 32px",
                         textAlign: "center",
-                        borderBottom: `1px solid ${isUpdate ? "#BFDBFE" : isCancel ? "#FECACA" : isReminder ? "#FDE68A" : isConfirmation ? "#A7F3D0" : "#B2E4EF"}`,
+                        borderBottom: `1px solid ${isUpdate ? "#BFDBFE" : (isCancel || isRejection) ? "#FECACA" : isReminder ? "#FDE68A" : isConfirmation ? "#A7F3D0" : "#B2E4EF"}`,
                       }}>
-                        <p style={{ margin: 0, fontSize: 22, fontWeight: "bold", color: isUpdate ? "#1D4ED8" : isCancel ? "#B91C1C" : isReminder ? "#92400E" : isConfirmation ? "#065F46" : ACCENT }}>
+                        <p style={{ margin: 0, fontSize: 22, fontWeight: "bold", color: isUpdate ? "#1D4ED8" : (isCancel || isRejection) ? "#B91C1C" : isReminder ? "#92400E" : isConfirmation ? "#065F46" : ACCENT }}>
                           {headline}
                         </p>
                         <p style={{ margin: "8px 0 0", fontSize: 13, color: "#6B7280", lineHeight: 1.6 }}>
@@ -181,12 +185,12 @@ export function ReservationEmail({
                             </tbody>
                           </table>
                         ) : (
-                          <table width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: isCancel ? "#FEF2F2" : BG, borderRadius: 12, border: `1px solid ${isCancel ? "#FECACA" : "#B2E4EF"}`, overflow: "hidden" }}>
+                          <table width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: (isCancel || isRejection) ? "#FEF2F2" : BG, borderRadius: 12, border: `1px solid ${(isCancel || isRejection) ? "#FECACA" : "#B2E4EF"}`, overflow: "hidden" }}>
                             <tbody>
                               <tr>
-                                <td style={{ padding: "16px 20px 8px", borderBottom: `1px solid ${isCancel ? "#FECACA" : "#D1EEF5"}` }}>
-                                  <p style={{ margin: 0, fontSize: 11, fontWeight: "bold", color: isCancel ? "#B91C1C" : ACCENT, textTransform: "uppercase", letterSpacing: 1 }}>
-                                    {isCancel ? "キャンセルされた予約" : "予約内容"}
+                                <td style={{ padding: "16px 20px 8px", borderBottom: `1px solid ${(isCancel || isRejection) ? "#FECACA" : "#D1EEF5"}` }}>
+                                  <p style={{ margin: 0, fontSize: 11, fontWeight: "bold", color: (isCancel || isRejection) ? "#B91C1C" : ACCENT, textTransform: "uppercase", letterSpacing: 1 }}>
+                                    {isRejection ? "お断りした予約" : isCancel ? "キャンセルされた予約" : "予約内容"}
                                   </p>
                                 </td>
                               </tr>
@@ -199,7 +203,7 @@ export function ReservationEmail({
                                 <tr key={row.label}>
                                   <td style={{
                                     padding: "12px 20px",
-                                    borderBottom: i < arr.length - 1 ? `1px solid ${isCancel ? "#FECACA" : "#D1EEF5"}` : "none",
+                                    borderBottom: i < arr.length - 1 ? `1px solid ${(isCancel || isRejection) ? "#FECACA" : "#D1EEF5"}` : "none",
                                   }}>
                                     <table width="100%" cellPadding={0} cellSpacing={0}>
                                       <tbody>
@@ -207,7 +211,7 @@ export function ReservationEmail({
                                           <td style={{ width: "40%", fontSize: 12, color: "#6B7280", verticalAlign: "top" }}>
                                             {row.label}
                                           </td>
-                                          <td style={{ fontSize: 13, fontWeight: "bold", color: isCancel ? "#7F1D1D" : "#111827", verticalAlign: "top" }}>
+                                          <td style={{ fontSize: 13, fontWeight: "bold", color: (isCancel || isRejection) ? "#7F1D1D" : "#111827", verticalAlign: "top" }}>
                                             {row.value}
                                           </td>
                                         </tr>
@@ -229,6 +233,11 @@ export function ReservationEmail({
                           <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.8, backgroundColor: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, padding: "14px 16px" }}>
                             ご予約の日時が変更されました。ご不便をおかけして申し訳ございません。<br />
                             ご不明な点はお電話にてお問い合わせください。
+                          </p>
+                        ) : isRejection ? (
+                          <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.8, backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "14px 16px" }}>
+                            申し訳ございませんが、ご希望の日時は既にご予約が埋まっており、お受けすることができませんでした。<br />
+                            別の日程をご検討いただけますと幸いです。
                           </p>
                         ) : isCancel ? (
                           <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.8, backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "14px 16px" }}>

@@ -14,7 +14,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { updateReservationStatus } from "@/services/reservationService";
+import { updateReservationStatus, rejectReservation } from "@/services/reservationService";
 import { messagingApi } from "@line/bot-sdk";
 import { buildConfirmationMessage } from "@/lib/line";
 import { sendReservationEmail } from "@/lib/email";
@@ -60,6 +60,46 @@ export async function confirmAppointment(
   revalidatePath(`/${tenantSlug}/appointments`);
 
   // redirect を除去: 承認後はリストに留まり連続作業できるようにする
+  return null;
+}
+
+// ── お断り ────────────────────────────────────────────────────────────
+
+export type RejectActionState = { error: string } | null;
+
+export async function rejectAppointment(
+  _prevState: RejectActionState,
+  formData: FormData
+): Promise<RejectActionState> {
+  const appointmentId = formData.get("appointmentId") as string;
+  const tenantId      = formData.get("tenantId")      as string;
+  const tenantSlug    = formData.get("tenantSlug")    as string;
+
+  if (!appointmentId || !tenantId || !tenantSlug) {
+    return { error: "必要なパラメータが不足しています。" };
+  }
+
+  const adminProfile = await prisma.profile.findFirst({
+    where:  { tenantId, role: "admin", isActive: true },
+    select: { id: true },
+  });
+  if (!adminProfile) {
+    return { error: "管理者プロフィールが見つかりません。" };
+  }
+
+  const result = await rejectReservation({
+    appointmentId,
+    tenantId,
+    changedById: adminProfile.id,
+  });
+
+  if (!result.success) {
+    return { error: result.error };
+  }
+
+  revalidatePath(`/${tenantSlug}/dashboard`);
+  revalidatePath(`/${tenantSlug}/appointments`);
+
   return null;
 }
 

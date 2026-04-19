@@ -58,6 +58,7 @@ const STATUS_BADGE: Record<AppointmentStatus, { label: string; cls: string }> = 
   pending:   { label: "承認待ち", cls: "bg-amber-50 text-amber-700 border-amber-200" },
   confirmed: { label: "確定",     cls: "bg-[var(--brand-bg)] text-[var(--brand-dark)] border-[var(--brand-border)]" },
   cancelled: { label: "キャンセル", cls: "bg-red-50 text-red-600 border-red-200" },
+  rejected:  { label: "予約不可",   cls: "bg-red-50 text-red-600 border-red-300" },
   no_show:   { label: "無断欠席", cls: "bg-gray-100 text-gray-500 border-gray-200" },
   completed: { label: "完了",     cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
 };

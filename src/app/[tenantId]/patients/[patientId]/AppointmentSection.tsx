@@ -21,7 +21,7 @@ type Staff = { id: string; displayName: string };
 
 export type Appointment = {
   id: string;
-  status: "pending" | "confirmed" | "cancelled" | "no_show" | "completed";
+  status: "pending" | "confirmed" | "cancelled" | "rejected" | "no_show" | "completed";
   startAt: Date;
   menuName: string;
   durationMin: number;
@@ -56,6 +56,7 @@ const STATUS_CONFIG = {
   pending:   { label: "仮受付",     icon: HourglassIcon, cls: "text-amber-700 bg-amber-50 border-amber-200" },
   completed: { label: "完了",       icon: CheckCircle2,  cls: "text-gray-500 bg-gray-50 border-gray-200" },
   cancelled: { label: "キャンセル", icon: XCircle,       cls: "text-red-500 bg-red-50 border-red-200" },
+  rejected:  { label: "予約不可",   icon: XCircle,       cls: "text-red-600 bg-red-50 border-red-300" },
   no_show:   { label: "無断欠席",   icon: XCircle,       cls: "text-rose-600 bg-rose-50 border-rose-200" },
 } as const;
 

@@ -14,8 +14,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { messagingApi } from "@line/bot-sdk";
-import { buildReceptionMessage, buildConfirmationMessage } from "@/lib/line";
-import { sendReservationEmail } from "@/lib/email";
+import { buildReceptionMessage, buildConfirmationMessage, buildRejectionMessage } from "@/lib/line";
+import { sendReservationEmail, sendRejectionEmail } from "@/lib/email";
 import { ensurePatientAccessToken, buildMypageUrl } from "@/lib/mypage";
 
 // ── 型定義 ──────────────────────────────────────────────────────────
@@ -377,6 +377,122 @@ export async function updateReservationStatus(
       console.log(`[reservationService] メール確定通知送信: appointmentId=${appointmentId}`);
     } catch (e) {
       console.error("[reservationService] メール送信エラー:", e);
+    }
+  }
+
+  return { success: true };
+}
+
+// ── お断り処理 ────────────────────────────────────────────────────────
+
+type RejectReservationInput = {
+  appointmentId: string;
+  tenantId:      string;
+  changedById:   string;
+};
+
+type RejectReservationResult =
+  | { success: true }
+  | { success: false; error: string };
+
+/**
+ * 予約を rejected に更新し、患者へお断り通知を送信する。
+ *
+ * CLAUDE.md 規約:
+ *   - status: "pending" の予約のみ対象（確定済みへの適用禁止）
+ *   - ステータス変更は必ず AppointmentLog に記録する（絶対ルール）
+ *   - LINE / メール送信失敗はお断り処理の成否に影響させない
+ */
+export async function rejectReservation(
+  input: RejectReservationInput
+): Promise<RejectReservationResult> {
+  const { appointmentId, tenantId, changedById } = input;
+
+  const appointment = await prisma.appointment.findFirst({
+    where:  { id: appointmentId, tenantId, status: "pending" },
+    select: {
+      id:          true,
+      menuName:    true,
+      durationMin: true,
+      price:       true,
+      startAt:     true,
+      endAt:       true,
+      patient: {
+        select: { displayName: true, lineUserId: true, email: true },
+      },
+    },
+  });
+
+  if (!appointment) {
+    return { success: false, error: "予約が見つからないか、すでに処理済みです。" };
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where:  { id: tenantId },
+    select: { name: true, phone: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true },
+  });
+  if (!tenant) {
+    return { success: false, error: "テナントが見つかりません。" };
+  }
+
+  const now = new Date();
+
+  try {
+    await prisma.$transaction([
+      prisma.appointment.update({
+        where: { id: appointmentId },
+        data:  { status: "rejected", cancelledAt: now, cancelledBy: changedById },
+      }),
+      prisma.appointmentLog.create({
+        data: {
+          appointmentId,
+          oldStatus:   "pending",
+          newStatus:   "rejected",
+          changedById,
+          note:        "管理画面よりお断り",
+        },
+      }),
+    ]);
+  } catch (e) {
+    console.error("[reservationService] rejectReservation DB error:", e);
+    return { success: false, error: "お断り処理中にエラーが発生しました。" };
+  }
+
+  const notifyArgs = {
+    tenantName:  tenant.name,
+    patientName: appointment.patient.displayName,
+    menuName:    appointment.menuName,
+    durationMin: appointment.durationMin,
+    price:       appointment.price,
+    startAt:     appointment.startAt,
+    endAt:       appointment.endAt,
+    phone:       tenant.phone,
+  };
+
+  if (tenant.lineEnabled && appointment.patient.lineUserId) {
+    try {
+      const token = tenant.lineChannelAccessToken ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
+      if (token) {
+        const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
+        await client.pushMessage({
+          to:       appointment.patient.lineUserId,
+          messages: [{ type: "text", text: buildRejectionMessage(notifyArgs) }],
+        });
+      }
+    } catch (e) {
+      console.error("[reservationService] LINE rejection push error:", e);
+    }
+  }
+
+  if (tenant.emailEnabled && appointment.patient.email) {
+    try {
+      await sendRejectionEmail({
+        to: appointment.patient.email,
+        ...notifyArgs,
+        address: null,
+      });
+    } catch (e) {
+      console.error("[reservationService] メールお断り送信エラー:", e);
     }
   }
 
