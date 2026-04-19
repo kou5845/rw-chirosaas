@@ -250,6 +250,7 @@ model Patient {
   birthDate        DateTime? @map("birth_date") @db.Date
   lineUserId       String?   @unique @map("line_user_id") @db.VarChar(64) // LINE ユーザーID
   accessToken      String?   @unique @map("access_token") @db.Uuid       // マイページ用マジックリンクトークン
+  accessPin        String?   @map("access_pin") @db.VarChar(4)           // マイページログイン用4桁PIN
   emergencyContact String?   @map("emergency_contact") @db.VarChar(255)
   heightCm         Float?    @map("height_cm")  // 身長 (cm): BMI 自動計算に使用
   memo             String?   // 院内メモ（患者非表示）
