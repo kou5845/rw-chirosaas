@@ -72,29 +72,33 @@ export async function updatePatient(
     errors.email = "正しいメールアドレスを入力してください。";
   }
 
-  // 生年月日: 必須（マイページログインIDとして使用）
-  let birthDate: Date | undefined = undefined;
+  // 生年月日: 既存患者が null の場合は保持（後から設定可能）、入力された場合は必須バリデーション
+  let birthDate: Date | null | undefined = undefined; // undefined = 変更しない
   const hasYear  = birthYear  && birthYear  !== "";
   const hasMonth = birthMonth && birthMonth !== "";
   const hasDay   = birthDay   && birthDay   !== "";
 
-  if (!hasYear || !hasMonth || !hasDay) {
-    errors.birthDate = "生年月日は必須です。年・月・日をすべて選択してください。";
-  } else {
-    const y = parseInt(birthYear!, 10);
-    const m = parseInt(birthMonth!, 10);
-    const d = parseInt(birthDay!, 10);
-    const candidate = new Date(y, m - 1, d);
-    if (
-      candidate.getFullYear() !== y ||
-      candidate.getMonth() !== m - 1 ||
-      candidate.getDate() !== d
-    ) {
-      errors.birthDate = "存在しない日付です。正しい生年月日を選択してください。";
+  if (hasYear || hasMonth || hasDay) {
+    // 一部だけ入力されている場合はエラー
+    if (!hasYear || !hasMonth || !hasDay) {
+      errors.birthDate = "生年月日は年・月・日をすべて選択してください。";
     } else {
-      birthDate = candidate;
+      const y = parseInt(birthYear!, 10);
+      const m = parseInt(birthMonth!, 10);
+      const d = parseInt(birthDay!, 10);
+      const candidate = new Date(y, m - 1, d);
+      if (
+        candidate.getFullYear() !== y ||
+        candidate.getMonth() !== m - 1 ||
+        candidate.getDate() !== d
+      ) {
+        errors.birthDate = "存在しない日付です。正しい生年月日を選択してください。";
+      } else {
+        birthDate = candidate;
+      }
     }
   }
+  // 3つとも空 = 変更なし（undefined のまま → update で birthDate フィールドを省略）
 
   if (Object.keys(errors).length > 0) return { errors };
 
@@ -102,9 +106,17 @@ export async function updatePatient(
     // CLAUDE.md 絶対ルール: tenantId で他テナントの患者へのアクセスを遮断
     const existing = await prisma.patient.findFirst({
       where: { id: patientId, tenantId },
-      select: { id: true },
+      select: { id: true, birthDate: true, accessPin: true },
     });
     if (!existing) return { errors: { general: "患者が見つかりません。" } };
+
+    // 保存後に生年月日が存在する（今回入力 or 既存DB値）かつ accessPin が未設定なら自動発行
+    const effectiveBirthDate = birthDate !== undefined ? birthDate : existing.birthDate;
+    const pinIsEmpty = existing.accessPin === null || existing.accessPin === "";
+    const newPin =
+      effectiveBirthDate !== null && pinIsEmpty
+        ? String(Math.floor(Math.random() * 10000)).padStart(4, "0")
+        : null;
 
     await prisma.patient.update({
       where: { id: patientId },
@@ -115,7 +127,8 @@ export async function updatePatient(
         email,
         emergencyContact,
         memo,
-        birthDate,
+        ...(birthDate !== undefined ? { birthDate } : {}),
+        ...(newPin !== null ? { accessPin: newPin } : {}),
       },
     });
   } catch (e: unknown) {
