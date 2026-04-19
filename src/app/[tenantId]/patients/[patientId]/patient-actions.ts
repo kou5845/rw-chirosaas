@@ -106,9 +106,16 @@ export async function updatePatient(
     // CLAUDE.md 絶対ルール: tenantId で他テナントの患者へのアクセスを遮断
     const existing = await prisma.patient.findFirst({
       where: { id: patientId, tenantId },
-      select: { id: true, birthDate: true },
+      select: { id: true, birthDate: true, accessPin: true },
     });
     if (!existing) return { errors: { general: "患者が見つかりません。" } };
+
+    // birthDate が新たに設定され、かつ accessPin が未生成なら自動発行
+    const willHaveBirthDate = birthDate !== undefined ? birthDate : existing.birthDate;
+    const shouldGeneratePin = willHaveBirthDate !== null && !existing.accessPin;
+    const newPin = shouldGeneratePin
+      ? String(Math.floor(Math.random() * 10000)).padStart(4, "0")
+      : undefined;
 
     await prisma.patient.update({
       where: { id: patientId },
@@ -120,6 +127,7 @@ export async function updatePatient(
         emergencyContact,
         memo,
         ...(birthDate !== undefined ? { birthDate } : {}),
+        ...(newPin !== undefined ? { accessPin: newPin } : {}),
       },
     });
   } catch (e: unknown) {
