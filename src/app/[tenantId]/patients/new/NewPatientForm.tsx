@@ -180,9 +180,9 @@ export function NewPatientForm({ tenantId, tenantSlug }: Props) {
             <div className="py-5">
               <p className="block text-sm font-medium text-gray-700">
                 生年月日
-                <span className="ml-1.5 text-xs font-normal text-gray-400">任意</span>
+                <span className="ml-1.5 text-xs font-normal text-red-500">必須</span>
               </p>
-              <p className="mt-0.5 text-xs text-gray-400">年齢計算・保険請求に使用</p>
+              <p className="mt-0.5 text-xs text-gray-400">マイページのログインIDとして使用されます</p>
 
               <div className="mt-2 flex items-center gap-2">
                 {/* 年 */}

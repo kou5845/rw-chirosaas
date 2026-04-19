@@ -79,6 +79,7 @@ export default async function PatientDetailPage({ params }: Props) {
       birthDate:       true,
       lineUserId:      true,
       accessToken:     true, // マイページ共有用
+      accessPin:       true, // マイページログインPIN
       emergencyContact: true,
       memo:            true,
       isActive:        true,
@@ -390,6 +391,42 @@ export default async function PatientDetailPage({ params }: Props) {
                 </p>
               </div>
             )}
+          </div>
+
+          {/* マイページログイン情報（スタッフが患者に伝える） */}
+          <div className="overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-bg)] shadow-sm">
+            <div className="flex items-center gap-2 border-b border-[var(--brand-border)] px-5 py-3.5">
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--brand)] text-white">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-dark)]">
+                マイページ ログイン情報
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="flex items-center justify-between rounded-xl bg-white border border-[var(--brand-border)] px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">ID（生年月日）</p>
+                  <p className="mt-0.5 font-mono text-sm font-semibold text-gray-700">
+                    {patient.birthDate
+                      ? `${patient.birthDate.getFullYear()}${String(patient.birthDate.getMonth() + 1).padStart(2, "0")}${String(patient.birthDate.getDate()).padStart(2, "0")}`
+                      : <span className="text-gray-300">未設定</span>
+                    }
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-white border border-[var(--brand-border)] px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">PASS（暗証番号）</p>
+                  <p className="mt-0.5 font-mono text-lg font-bold tracking-[0.3em] text-[var(--brand-dark)]">
+                    {patient.accessPin ?? <span className="text-sm font-normal text-gray-300">未設定</span>}
+                  </p>
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-400 px-0.5">
+                上記をお伝えすると患者様がマイページにログインできます
+              </p>
+            </div>
           </div>
 
           {/* マイページ共有 */}

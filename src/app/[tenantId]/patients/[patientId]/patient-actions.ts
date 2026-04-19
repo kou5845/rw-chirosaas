@@ -72,32 +72,28 @@ export async function updatePatient(
     errors.email = "正しいメールアドレスを入力してください。";
   }
 
-  let birthDate: Date | null | undefined = undefined; // undefined = 変更しない
+  // 生年月日: 必須（マイページログインIDとして使用）
+  let birthDate: Date | undefined = undefined;
   const hasYear  = birthYear  && birthYear  !== "";
   const hasMonth = birthMonth && birthMonth !== "";
   const hasDay   = birthDay   && birthDay   !== "";
 
-  if (hasYear || hasMonth || hasDay) {
-    if (!hasYear || !hasMonth || !hasDay) {
-      errors.birthDate = "生年月日は年・月・日をすべて選択してください。";
-    } else {
-      const y = parseInt(birthYear!, 10);
-      const m = parseInt(birthMonth!, 10);
-      const d = parseInt(birthDay!, 10);
-      const candidate = new Date(y, m - 1, d);
-      if (
-        candidate.getFullYear() !== y ||
-        candidate.getMonth() !== m - 1 ||
-        candidate.getDate() !== d
-      ) {
-        errors.birthDate = "存在しない日付です。正しい生年月日を選択してください。";
-      } else {
-        birthDate = candidate;
-      }
-    }
+  if (!hasYear || !hasMonth || !hasDay) {
+    errors.birthDate = "生年月日は必須です。年・月・日をすべて選択してください。";
   } else {
-    // 3つとも空 = 生年月日クリア
-    birthDate = null;
+    const y = parseInt(birthYear!, 10);
+    const m = parseInt(birthMonth!, 10);
+    const d = parseInt(birthDay!, 10);
+    const candidate = new Date(y, m - 1, d);
+    if (
+      candidate.getFullYear() !== y ||
+      candidate.getMonth() !== m - 1 ||
+      candidate.getDate() !== d
+    ) {
+      errors.birthDate = "存在しない日付です。正しい生年月日を選択してください。";
+    } else {
+      birthDate = candidate;
+    }
   }
 
   if (Object.keys(errors).length > 0) return { errors };
@@ -119,7 +115,7 @@ export async function updatePatient(
         email,
         emergencyContact,
         memo,
-        ...(birthDate !== undefined ? { birthDate } : {}),
+        birthDate,
       },
     });
   } catch (e: unknown) {
