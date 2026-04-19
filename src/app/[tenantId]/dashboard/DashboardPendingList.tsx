@@ -10,12 +10,12 @@
  *   - ヘッダーの「一括承認」ボタン（全件一気に承認）
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useTransition } from "react";
 import {
   CheckCircle2, Trash2, CheckSquare, Square,
-  Loader2, AlertCircle, CheckCheck,
+  Loader2, AlertCircle, CheckCheck, X,
 } from "lucide-react";
-import { bulkApproveAppointments } from "@/app/[tenantId]/appointments/actions";
+import { bulkApproveAppointments, rejectAppointment } from "@/app/[tenantId]/appointments/actions";
 import { deleteAppointment, bulkDeleteAppointments } from "@/app/[tenantId]/appointments/delete-action";
 import { cn } from "@/lib/utils";
 
@@ -56,12 +56,14 @@ export function DashboardPendingList({ tenantId, tenantSlug, appointments: initi
   const [appts,        setAppts]       = useState(initial);
   const [selectedIds,  setSelectedIds] = useState<Set<string>>(new Set());
   const [approvingId,  setApprovingId] = useState<string | null>(null);
+  const [rejectingId,  setRejectingId] = useState<string | null>(null);
   const [deletingId,   setDeletingId]  = useState<string | null>(null);
   const [confirmId,    setConfirmId]   = useState<string | null>(null);
   const [error,        setError]       = useState<string | null>(null);
 
   const [bulkApproving, setBulkApproving] = useState(false);
   const [bulkDeleting,  setBulkDeleting]  = useState(false);
+  const [, startTransition] = useTransition();
 
   // ── 個別承認 ──────────────────────────────────────────────────────
   const handleApprove = useCallback(async (apptId: string) => {
@@ -78,6 +80,28 @@ export function DashboardPendingList({ tenantId, tenantSlug, appointments: initi
     }
     setApprovingId(null);
   }, [appts, tenantId, tenantSlug]);
+
+  // ── お断り ────────────────────────────────────────────────────────
+  const handleReject = useCallback(async (apptId: string) => {
+    const ok = window.confirm("この予約をお断りしますか？\n患者へお断りの通知が送信されます。");
+    if (!ok) return;
+    setRejectingId(apptId);
+    setError(null);
+    const fd = new FormData();
+    fd.set("appointmentId", apptId);
+    fd.set("tenantId",      tenantId);
+    fd.set("tenantSlug",    tenantSlug);
+    startTransition(async () => {
+      const result = await rejectAppointment(null, fd);
+      if (result?.error) {
+        setError(result.error);
+      } else {
+        setAppts((a) => a.filter((x) => x.id !== apptId));
+        setSelectedIds((s) => { const n = new Set(s); n.delete(apptId); return n; });
+      }
+      setRejectingId(null);
+    });
+  }, [tenantId, tenantSlug]);
 
   // ── 個別削除 ──────────────────────────────────────────────────────
   const handleDelete = useCallback(async (apptId: string) => {
@@ -231,10 +255,11 @@ export function DashboardPendingList({ tenantId, tenantSlug, appointments: initi
       <div className="divide-y divide-gray-50">
         {appts.map((appt) => {
           const isApproving = approvingId === appt.id;
+          const isRejecting = rejectingId === appt.id;
           const isDeleting  = deletingId  === appt.id;
           const isConfirm   = confirmId   === appt.id;
           const isSelected  = selectedIds.has(appt.id);
-          const isLoading   = isApproving || isDeleting;
+          const isLoading   = isApproving || isRejecting || isDeleting;
 
           return (
             <div
@@ -296,6 +321,22 @@ export function DashboardPendingList({ tenantId, tenantSlug, appointments: initi
                   <CheckCircle2 size={12} />
                 )}
                 承認
+              </button>
+
+              {/* お断りボタン */}
+              <button
+                type="button"
+                onClick={() => handleReject(appt.id)}
+                disabled={isLoading || bulkApproving || bulkDeleting}
+                aria-label="お断り"
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
+              >
+                {isRejecting ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <X size={12} strokeWidth={2.5} />
+                )}
+                お断り
               </button>
 
               {/* 削除ボタン */}
