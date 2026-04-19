@@ -263,7 +263,7 @@ function EditDialog({
           <div className="py-4">
             <p className="block text-sm font-medium text-gray-700">
               生年月日
-              <span className="ml-1.5 text-xs font-normal text-gray-400">任意</span>
+              <span className="ml-1.5 text-xs font-normal text-red-500">必須</span>
             </p>
             <div className="mt-1.5 flex items-center gap-2">
               <div className="relative flex-1">
