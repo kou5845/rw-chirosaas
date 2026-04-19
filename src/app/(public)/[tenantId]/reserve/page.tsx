@@ -12,7 +12,8 @@ import { prisma } from "@/lib/prisma";
 import { ReserveForm, type BusinessHourSummary, type ServiceSummary } from "./ReserveForm";
 
 type Props = {
-  params: Promise<{ tenantId: string }>;
+  params:       Promise<{ tenantId: string }>;
+  searchParams: Promise<{ name?: string; kana?: string; phone?: string; email?: string }>;
 };
 
 export async function generateMetadata({ params }: Props) {
@@ -26,8 +27,9 @@ export async function generateMetadata({ params }: Props) {
   };
 }
 
-export default async function ReservePage({ params }: Props) {
+export default async function ReservePage({ params, searchParams }: Props) {
   const { tenantId: slug } = await params;
+  const { name, kana, phone: prefillPhone, email: prefillEmail } = await searchParams;
 
   // CLAUDE.md: tenantId は DB 照合で確定
   const tenant = await prisma.tenant.findUnique({
@@ -102,6 +104,12 @@ export default async function ReservePage({ params }: Props) {
             address={tenant.address}
             lineEnabled={tenant.lineEnabled}
             lineFriendUrl={tenant.lineFriendUrl}
+            prefill={{
+              name:     name,
+              nameKana: kana,
+              phone:    prefillPhone,
+              email:    prefillEmail,
+            }}
           />
         </div>
 

@@ -2,10 +2,10 @@
  * 24時間前リマインダー送信ロジック
  *
  * 処理フロー:
- *   1. 現在時刻から 23〜25 時間後に開始される confirmed 予約を取得
+ *   1. 現在時刻から 15〜39 時間後に開始される confirmed 予約を取得
  *      （reminderSent=false のもののみ）
- *      ※ ウィンドウを2時間幅にすることで、Cronが1回遅延・失敗しても
- *         隣接するランがフォールバックとして機能する（reminderSent で二重送信防止）
+ *      ※ 日次Cron（00:00 UTC = 09:00 JST）でJST翌日全時間帯をカバーするため
+ *         24時間幅にする。reminderSent=false が二重送信を防ぐ。
  *   2. テナントの通知設定を確認
  *      - lineEnabled=true かつ patient.lineUserId あり → 当該テナントの LINE チャネルで送信
  *        （tenant.lineChannelAccessToken → 環境変数 LINE_CHANNEL_ACCESS_TOKEN の順でフォールバック）
@@ -42,11 +42,12 @@ export type ReminderResult = {
 export async function sendPendingReminders(): Promise<ReminderResult> {
   const now = new Date();
 
-  // 対象ウィンドウ: now+23h 〜 now+25h（2時間幅）
-  // 幅を2時間にすることで、Cronが1回失敗した場合でも前後のランでリカバリー可能。
+  // 対象ウィンドウ: now+15h 〜 now+39h（24時間幅）
+  // 日次Cron（00:00 UTC = 09:00 JST）から翌日JST全時間帯（00:00〜23:59 JST）を
+  // 漏れなくカバーするため24時間幅にする。
   // reminderSent=false フィルタが二重送信を防ぐ。
-  const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-  const windowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+  const windowStart = new Date(now.getTime() + 15 * 60 * 60 * 1000);
+  const windowEnd   = new Date(now.getTime() + 39 * 60 * 60 * 1000);
 
   console.log(
     `[reminders] 実行開始 executedAt=${now.toISOString()} ` +

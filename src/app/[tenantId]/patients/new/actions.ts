@@ -66,29 +66,27 @@ export async function createPatient(
     errors.email = "正しいメールアドレスを入力してください。";
   }
 
-  // 生年月日: 3つすべて揃っている場合のみ有効な日付として扱う
+  // 生年月日: 必須（マイページログインID として使用）
   let birthDate: Date | null = null;
   const hasYear  = birthYear  && birthYear  !== "";
   const hasMonth = birthMonth && birthMonth !== "";
   const hasDay   = birthDay   && birthDay   !== "";
 
-  if (hasYear || hasMonth || hasDay) {
-    if (!hasYear || !hasMonth || !hasDay) {
-      errors.birthDate = "生年月日は年・月・日をすべて選択してください。";
+  if (!hasYear || !hasMonth || !hasDay) {
+    errors.birthDate = "生年月日は必須です。年・月・日をすべて選択してください。";
+  } else {
+    const y = parseInt(birthYear!, 10);
+    const m = parseInt(birthMonth!, 10);
+    const d = parseInt(birthDay!, 10);
+    const candidate = new Date(y, m - 1, d);
+    if (
+      candidate.getFullYear() !== y ||
+      candidate.getMonth() !== m - 1 ||
+      candidate.getDate() !== d
+    ) {
+      errors.birthDate = "存在しない日付です。正しい生年月日を選択してください。";
     } else {
-      const y = parseInt(birthYear!, 10);
-      const m = parseInt(birthMonth!, 10);
-      const d = parseInt(birthDay!, 10);
-      const candidate = new Date(y, m - 1, d);
-      if (
-        candidate.getFullYear() !== y ||
-        candidate.getMonth() !== m - 1 ||
-        candidate.getDate() !== d
-      ) {
-        errors.birthDate = "存在しない日付です。正しい生年月日を選択してください。";
-      } else {
-        birthDate = candidate;
-      }
+      birthDate = candidate;
     }
   }
 
@@ -96,11 +94,14 @@ export async function createPatient(
     return { errors };
   }
 
+  // 4桁のランダムPINを生成（マイページログインPASS として使用）
+  const accessPin = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+
   let newPatientId: string;
 
   try {
     // CLAUDE.md 絶対ルール: tenantId フィルタ必須
-    // accessToken を登録時に自動生成（マイページURL通知を即座に有効化）
+    // accessToken・accessPin を登録時に自動生成
     const patient = await prisma.patient.create({
       data: {
         tenantId,
@@ -111,6 +112,7 @@ export async function createPatient(
         birthDate,
         isActive:    true,
         accessToken: crypto.randomUUID(),
+        accessPin,
       },
       select: { id: true },
     });

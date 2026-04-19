@@ -83,7 +83,7 @@ export async function getAvailableSlots(
 
 export type PublicReservationState = {
   success?: boolean;
-  errors?: { general?: string; name?: string; phone?: string; email?: string };
+  errors?: { general?: string; name?: string; nameKana?: string; phone?: string; email?: string };
 } | null;
 
 export async function submitPublicReservation(
@@ -94,6 +94,7 @@ export async function submitPublicReservation(
   const dateStr       = (formData.get("date")          as string | null)?.trim() ?? "";
   const timeStr       = (formData.get("time")          as string | null)?.trim() ?? "";
   const name          = (formData.get("name")          as string | null)?.trim() ?? "";
+  const nameKana      = (formData.get("nameKana")      as string | null)?.trim() || null;
   const phone         = (formData.get("phone")         as string | null)?.trim() ?? "";
   const email         = (formData.get("email")         as string | null)?.trim() || null;
   const menuNameRaw   = (formData.get("menuName")      as string | null)?.trim() || null;
@@ -105,7 +106,11 @@ export async function submitPublicReservation(
   if (!tenantSlug || !dateStr || !timeStr) {
     return { errors: { general: "選択内容が不足しています。最初からやり直してください。" } };
   }
-  if (!name)  return { errors: { name:  "お名前を入力してください。" } };
+  if (!name)     return { errors: { name:     "お名前を入力してください。" } };
+  if (!nameKana) return { errors: { nameKana: "ふりがなを入力してください。" } };
+  if (nameKana && !/^[ぁ-ん\s　]+$/.test(nameKana)) {
+    return { errors: { nameKana: "ふりがなはひらがなで入力してください。" } };
+  }
   if (!phone) return { errors: { phone: "電話番号を入力してください。" } };
   if (!/^[\d\-\s]{10,13}$/.test(phone)) {
     return { errors: { phone: "正しい電話番号を入力してください（例: 090-1234-5678）。" } };
@@ -171,6 +176,7 @@ export async function submitPublicReservation(
       data: {
         tenantId:    tenant.id,
         displayName: name,
+        nameKana:    nameKana ?? undefined,
         phone:       phone,
         email:       email ?? undefined,
         accessToken: crypto.randomUUID(),
