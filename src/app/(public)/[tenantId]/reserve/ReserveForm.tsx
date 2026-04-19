@@ -30,6 +30,13 @@ export type ServiceSummary = {
   price:       number;
 };
 
+type PrefillData = {
+  name?:     string;
+  nameKana?: string;
+  phone?:    string;
+  email?:    string;
+};
+
 type Props = {
   tenantSlug:    string;
   businessHours: BusinessHourSummary[];
@@ -38,6 +45,7 @@ type Props = {
   address?:      string | null;
   lineEnabled?:  boolean;
   lineFriendUrl?: string | null;
+  prefill?:      PrefillData;
 };
 
 // ── 定数 ─────────────────────────────────────────────────────────────
@@ -121,7 +129,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
 
 // ── メインコンポーネント ──────────────────────────────────────────────
 
-export function ReserveForm({ tenantSlug, businessHours, services, phone, address, lineEnabled, lineFriendUrl }: Props) {
+export function ReserveForm({ tenantSlug, businessHours, services, phone, address, lineEnabled, lineFriendUrl, prefill }: Props) {
   const today = new Date();
 
   // ステップ管理
@@ -562,6 +570,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
           required
           autoComplete="name"
           placeholder="山田 太郎"
+          defaultValue={prefill?.name ?? ""}
           className={inputCls + (errors?.name ? " border-red-300 bg-red-50/50" : "")}
         />
         {errors?.name && (
@@ -585,6 +594,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
           required
           autoComplete="off"
           placeholder="やまだ たろう"
+          defaultValue={prefill?.nameKana ?? ""}
           className={inputCls + (errors?.nameKana ? " border-red-300 bg-red-50/50" : "")}
         />
         {errors?.nameKana && (
@@ -608,6 +618,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
           required
           autoComplete="tel"
           placeholder="090-1234-5678"
+          defaultValue={prefill?.phone ?? ""}
           className={inputCls + (errors?.phone ? " border-red-300 bg-red-50/50" : "")}
         />
         {errors?.phone && (
@@ -633,6 +644,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
           type="email"
           autoComplete="email"
           placeholder="example@mail.com"
+          defaultValue={prefill?.email ?? ""}
           className={inputCls + (errors?.email ? " border-red-300 bg-red-50/50" : "")}
         />
         {errors?.email && (
