@@ -81,5 +81,5 @@ export async function logoutMypage(tenantSlug: string): Promise<void> {
     maxAge:   0,
     path:     `/${tenantSlug}/mypage`,
   });
-  redirect(`/${tenantSlug}/mypage`);
+  redirect(`/${tenantSlug}/mypage/login`);
 }

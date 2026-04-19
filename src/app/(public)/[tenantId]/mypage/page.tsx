@@ -12,13 +12,12 @@
  */
 
 import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   Phone, MapPin, CalendarDays, Clock, Activity, ChevronRight, Sparkles,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken, COOKIE_NAME } from "@/lib/mypage-session";
-import { MypageLoginForm } from "./MypageLoginForm";
 import { GrowthChart } from "./[token]/GrowthChart";
 import { MediaGallery } from "./[token]/MediaGallery";
 import { AppointmentHistory } from "./[token]/AppointmentHistory";
@@ -59,9 +58,9 @@ export default async function MypageIndexPage({ params }: Props) {
   const cookieVal = jar.get(COOKIE_NAME)?.value ?? "";
   const session   = cookieVal ? verifySessionToken(cookieVal) : null;
 
-  // 未認証 → ログイン画面
+  // 未認証 → ログインページへリダイレクト
   if (!session || session.tenantId !== tenant.id) {
-    return <MypageLoginForm tenantSlug={slug} clinicName={tenant.name} />;
+    redirect(`/${slug}/mypage/login`);
   }
 
   // ── 患者データ取得 ────────────────────────────────────────────────
@@ -78,9 +77,9 @@ export default async function MypageIndexPage({ params }: Props) {
       accessToken: true,
     },
   });
-  // セッションが有効でも患者が削除済み・別テナントの場合
+  // セッションが有効でも患者が削除済み・別テナントの場合はログインへ
   if (!patient) {
-    return <MypageLoginForm tenantSlug={slug} clinicName={tenant.name} />;
+    redirect(`/${slug}/mypage/login`);
   }
 
   // ── フィーチャートグル ────────────────────────────────────────────
