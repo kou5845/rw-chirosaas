@@ -110,12 +110,13 @@ export async function updatePatient(
     });
     if (!existing) return { errors: { general: "患者が見つかりません。" } };
 
-    // birthDate が新たに設定され、かつ accessPin が未生成なら自動発行
-    const willHaveBirthDate = birthDate !== undefined ? birthDate : existing.birthDate;
-    const shouldGeneratePin = willHaveBirthDate !== null && !existing.accessPin;
-    const newPin = shouldGeneratePin
-      ? String(Math.floor(Math.random() * 10000)).padStart(4, "0")
-      : undefined;
+    // 保存後に生年月日が存在する（今回入力 or 既存DB値）かつ accessPin が未設定なら自動発行
+    const effectiveBirthDate = birthDate !== undefined ? birthDate : existing.birthDate;
+    const pinIsEmpty = existing.accessPin === null || existing.accessPin === "";
+    const newPin =
+      effectiveBirthDate !== null && pinIsEmpty
+        ? String(Math.floor(Math.random() * 10000)).padStart(4, "0")
+        : null;
 
     await prisma.patient.update({
       where: { id: patientId },
@@ -127,7 +128,7 @@ export async function updatePatient(
         emergencyContact,
         memo,
         ...(birthDate !== undefined ? { birthDate } : {}),
-        ...(newPin !== undefined ? { accessPin: newPin } : {}),
+        ...(newPin !== null ? { accessPin: newPin } : {}),
       },
     });
   } catch (e: unknown) {
