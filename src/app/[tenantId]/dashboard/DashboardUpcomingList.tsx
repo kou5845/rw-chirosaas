@@ -7,14 +7,15 @@
  * CLAUDE.md 規約: tenantId / tenantSlug はサーバーから Props 経由で渡す。
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useTransition } from "react";
 import {
-  CalendarDays, Clock, Pencil, Trash2, CheckSquare, Square,
-  Loader2, AlertCircle,
+  CalendarDays, Pencil, Trash2, CheckSquare, Square,
+  Loader2, AlertCircle, Check, X,
 } from "lucide-react";
 import type { AppointmentStatus } from "@prisma/client";
 import { NewAppointmentDialog, type EditModeData, type BusinessHourData, type ServiceItem, type ExerciseItem } from "@/components/appointments/NewAppointmentDialog";
 import { deleteAppointment, bulkDeleteAppointments } from "@/app/[tenantId]/appointments/delete-action";
+import { confirmAppointment, rejectAppointment } from "@/app/[tenantId]/appointments/actions";
 import { cn } from "@/lib/utils";
 
 type Staff = { id: string; displayName: string };
@@ -114,6 +115,9 @@ export function DashboardUpcomingList({
   const [selectedIds,    setSelectedIds]   = useState<Set<string>>(new Set());
   const [bulkDeleting,   setBulkDeleting]  = useState(false);
   const [error,          setError]         = useState<string | null>(null);
+  const [approvingId,    setApprovingId]   = useState<string | null>(null);
+  const [rejectingId,    setRejectingId]   = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   const editableStatuses: AppointmentStatus[] = ["pending", "confirmed"];
 
@@ -149,6 +153,46 @@ export function DashboardUpcomingList({
     setSelectedIds(new Set());
     setBulkDeleting(false);
   }, [appts, selectedIds, tenantSlug]);
+
+  // ── 承認 ──
+  const handleApprove = useCallback(async (apptId: string) => {
+    setApprovingId(apptId);
+    setError(null);
+    const fd = new FormData();
+    fd.set("appointmentId", apptId);
+    fd.set("tenantId",      tenantId);
+    fd.set("tenantSlug",    tenantSlug);
+    startTransition(async () => {
+      const result = await confirmAppointment(null, fd);
+      if (result?.error) {
+        setError(result.error);
+      } else {
+        setAppts((a) => a.map((x) => x.id === apptId ? { ...x, status: "confirmed" as AppointmentStatus } : x));
+      }
+      setApprovingId(null);
+    });
+  }, [tenantId, tenantSlug]);
+
+  // ── お断り ──
+  const handleReject = useCallback(async (apptId: string) => {
+    const ok = window.confirm("この予約をお断りしますか？\n患者へお断りの通知が送信されます。");
+    if (!ok) return;
+    setRejectingId(apptId);
+    setError(null);
+    const fd = new FormData();
+    fd.set("appointmentId", apptId);
+    fd.set("tenantId",      tenantId);
+    fd.set("tenantSlug",    tenantSlug);
+    startTransition(async () => {
+      const result = await rejectAppointment(null, fd);
+      if (result?.error) {
+        setError(result.error);
+      } else {
+        setAppts((a) => a.filter((x) => x.id !== apptId));
+      }
+      setRejectingId(null);
+    });
+  }, [tenantId, tenantSlug]);
 
   // ── チェックボックス ──
   const toggleSelect = (id: string) => {
@@ -214,11 +258,14 @@ export function DashboardUpcomingList({
       {/* リスト */}
       <div className="divide-y divide-gray-50">
         {appts.map((appt) => {
-          const isEditable  = editableStatuses.includes(appt.status);
-          const isConfirm   = confirmId === appt.id;
-          const isDeleting  = deletingId === appt.id;
-          const isSelected  = selectedIds.has(appt.id);
-          const badge       = STATUS_CONFIG[appt.status];
+          const isEditable   = editableStatuses.includes(appt.status);
+          const isPending    = appt.status === "pending";
+          const isConfirm    = confirmId === appt.id;
+          const isDeleting   = deletingId === appt.id;
+          const isApproving  = approvingId === appt.id;
+          const isRejecting  = rejectingId === appt.id;
+          const isSelected   = selectedIds.has(appt.id);
+          const badge        = STATUS_CONFIG[appt.status];
 
           return (
             <div
@@ -280,6 +327,38 @@ export function DashboardUpcomingList({
               {/* 操作ボタン（編集可能ステータスのみ）*/}
               {isEditable && (
                 <div className="flex shrink-0 items-center gap-1">
+                  {/* 承認待ちのみ: 承認 + お断りボタン */}
+                  {isPending && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleApprove(appt.id)}
+                        disabled={isApproving || isRejecting}
+                        aria-label="承認"
+                        className="flex h-8 items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+                      >
+                        {isApproving
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <Check size={12} strokeWidth={2.5} />
+                        }
+                        承認
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleReject(appt.id)}
+                        disabled={isApproving || isRejecting}
+                        aria-label="お断り"
+                        className="flex h-8 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
+                      >
+                        {isRejecting
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <X size={12} strokeWidth={2.5} />
+                        }
+                        お断り
+                      </button>
+                    </>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => setEditTarget(toEditModeData(appt))}
