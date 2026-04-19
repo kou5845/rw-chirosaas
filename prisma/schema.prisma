@@ -33,6 +33,7 @@ enum AppointmentStatus {
   pending    // 仮受付（初期状態）
   confirmed  // 確定（承認済）
   cancelled  // キャンセル
+  rejected   // お断り（院都合で受付不可）
   no_show    // 無断欠席
   completed  // 施術完了
 }
@@ -72,6 +73,7 @@ enum NotificationType {
   reminder_24h  // リマインダー (24時間前)
   reminder_2h   // リマインダー (2時間前)
   cancellation  // キャンセル通知
+  rejection     // お断り通知（院都合）
 }
 
 enum NotificationStatus {

@@ -235,6 +235,25 @@ export function buildUpdateMessage(args: NotificationTemplateArgs & {
 }
 
 /**
+ * お断り通知のメッセージ文字列を生成する。
+ */
+export function buildRejectionMessage(args: NotificationTemplateArgs): string {
+  const { tenantName, menuName, durationMin, startAt, endAt, phone } = args;
+  return [
+    "【ご予約についてのお知らせ】",
+    `${tenantName} です。`,
+    "",
+    `📅 ${fmtDate(startAt)} ${fmtTime(startAt)}〜${fmtTime(endAt)}`,
+    `💆 ${menuName}（${durationMin}分）`,
+    "",
+    "申し訳ございませんが、ご希望の日時は既にご予約が埋まっており、",
+    "お受けすることができませんでした。",
+    "別の日程をご検討いただけますと幸いです。",
+    ...(phone ? ["", `📞 ${phone}`] : []),
+  ].join("\n");
+}
+
+/**
  * notificationType に応じたメッセージ文字列を返すディスパッチ関数。
  */
 export function buildNotificationMessage(
@@ -247,6 +266,7 @@ export function buildNotificationMessage(
     case "reminder_24h":  return buildReminder24hMessage(args);
     case "reminder_2h":   return buildReminder2hMessage(args);
     case "cancellation":  return buildCancellationMessage(args);
+    case "rejection":     return buildRejectionMessage(args);
     default:
       return `${args.tenantName} からのお知らせがあります。`;
   }

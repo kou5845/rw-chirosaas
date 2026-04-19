@@ -165,6 +165,36 @@ export async function sendUpdateEmail(params: SendUpdateEmailParams): Promise<vo
   }
 }
 
+export type SendRejectionEmailParams = Omit<ReservationEmailProps, "type"> & {
+  to: string;
+};
+
+/**
+ * 予約お断り通知メールを送信する（院都合）。
+ */
+export async function sendRejectionEmail(params: SendRejectionEmailParams): Promise<void> {
+  const { to, tenantName, ...rest } = params;
+  const subject = `【${tenantName}】ご予約についてのお知らせ`;
+  const from    = `${tenantName} <${process.env.EMAIL_FROM ?? "noreply@resend.dev"}>`;
+  const resend  = getResend();
+
+  const { error } = await resend.emails.send({
+    from,
+    to,
+    subject,
+    react: createElement(ReservationEmail, {
+      type: "rejection",
+      tenantName,
+      ...rest,
+      staticMapUrl: null,
+    }),
+  });
+
+  if (error) {
+    throw new Error(`[email.ts] Resend API エラー（rejection）: ${JSON.stringify(error)}`);
+  }
+}
+
 export type SendCancellationEmailParams = Omit<ReservationEmailProps, "type"> & {
   to: string;
 };

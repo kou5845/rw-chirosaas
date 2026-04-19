@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 
 // ─── 型定義 ─────────────────────────────────────────────────────────────────
 
-type ApptStatus = "pending" | "confirmed" | "cancelled" | "no_show" | "completed";
+type ApptStatus = "pending" | "confirmed" | "cancelled" | "rejected" | "no_show" | "completed";
 
 export type SerializedAppointment = {
   id:          string;
@@ -107,6 +107,10 @@ const STATUS_CFG: Record<ApptStatus, {
   completed: {
     bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-900",
     label: "完了",   pill: "bg-emerald-100 text-emerald-700 border-emerald-200", accent: "bg-emerald-400",
+  },
+  rejected: {
+    bg: "bg-red-50", border: "border-red-300", text: "text-red-500",
+    label: "予約不可", pill: "bg-red-50 text-red-600 border-red-300", accent: "bg-red-400",
   },
   cancelled: {
     bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-400",

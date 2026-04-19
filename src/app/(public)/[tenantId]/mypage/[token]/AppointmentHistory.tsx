@@ -60,6 +60,11 @@ const STATUS_CONFIG = {
     icon:  XCircle,
     cls:   "text-red-400 bg-red-50 border-red-200",
   },
+  rejected: {
+    label: "予約不可",
+    icon:  XCircle,
+    cls:   "text-red-500 bg-red-50 border-red-300",
+  },
 } as const;
 
 // ── メインコンポーネント ───────────────────────────────────────────────
