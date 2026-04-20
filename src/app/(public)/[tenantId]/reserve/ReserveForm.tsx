@@ -666,7 +666,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
             <div className="mt-4 border-t border-[var(--brand-border)] pt-3 flex items-center justify-between">
               <p className="text-[11px] text-gray-400">登録情報の変更はマイページから行えます</p>
               <a
-                href={`/${tenantSlug}/mypage`}
+                href={`/${tenantSlug}/mypage#profile`}
                 className="ml-3 shrink-0 text-[11px] font-semibold text-[var(--brand-medium)] underline underline-offset-2 hover:text-[var(--brand-dark)]"
               >
                 マイページへ →
