@@ -8,12 +8,15 @@
  * Step 3: 患者情報入力 + 送信
  */
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   ChevronLeft, ChevronRight, Clock, CalendarDays,
   User, Phone, Mail, CheckCircle2, AlertCircle, Loader2, MapPin, MessageCircle,
 } from "lucide-react";
-import { getAvailableSlots, submitPublicReservation, type PublicReservationState } from "./actions";
+import {
+  getAvailableSlots, submitPublicReservation, checkPatientMatch,
+  type PublicReservationState,
+} from "./actions";
 
 // ── 型定義 ────────────────────────────────────────────────────────────
 
@@ -37,15 +40,29 @@ type PrefillData = {
   email?:    string;
 };
 
+export type LockedPatient = {
+  id:          string;
+  displayName: string;
+  nameKana:    string | null;
+  phone:       string | null;
+  email:       string | null;
+};
+
+type WarningState = {
+  type:            "not_found" | "name_mismatch";
+  registeredName?: string;
+};
+
 type Props = {
-  tenantSlug:    string;
-  businessHours: BusinessHourSummary[];
-  services?:     ServiceSummary[];
-  phone?:        string | null;
-  address?:      string | null;
-  lineEnabled?:  boolean;
+  tenantSlug:     string;
+  businessHours:  BusinessHourSummary[];
+  services?:      ServiceSummary[];
+  phone?:         string | null;
+  address?:       string | null;
+  lineEnabled?:   boolean;
   lineFriendUrl?: string | null;
-  prefill?:      PrefillData;
+  prefill?:       PrefillData;
+  lockedPatient?: LockedPatient;
 };
 
 // ── 定数 ─────────────────────────────────────────────────────────────
@@ -129,7 +146,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
 
 // ── メインコンポーネント ──────────────────────────────────────────────
 
-export function ReserveForm({ tenantSlug, businessHours, services, phone, address, lineEnabled, lineFriendUrl, prefill }: Props) {
+export function ReserveForm({ tenantSlug, businessHours, services, phone, address, lineEnabled, lineFriendUrl, prefill, lockedPatient }: Props) {
   const today = new Date();
 
   // ステップ管理
@@ -182,6 +199,51 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
   useEffect(() => {
     if (formState?.success) setStep("done");
   }, [formState]);
+
+  // ── 患者照合・警告ステート ──
+  const [warningState,  setWarningState]  = useState<WarningState | null>(null);
+  const [isChecking,    setIsChecking]    = useState(false);
+  const pendingFdRef = useRef<FormData | null>(null);
+
+  async function handleFormSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+
+    // マイページ認証済み → 照合スキップ
+    if (lockedPatient) {
+      formAction(fd);
+      return;
+    }
+
+    const inputPhone = (fd.get("phone") as string | null)?.trim() ?? "";
+    const inputName  = (fd.get("name")  as string | null)?.trim() ?? "";
+
+    setIsChecking(true);
+    try {
+      const result = await checkPatientMatch(tenantSlug, inputPhone, inputName);
+      if (result.status === "matched") {
+        formAction(fd);
+      } else {
+        pendingFdRef.current = fd;
+        setWarningState({ type: result.status, registeredName: result.registeredName });
+      }
+    } finally {
+      setIsChecking(false);
+    }
+  }
+
+  function handleWarningConfirm() {
+    if (pendingFdRef.current) {
+      formAction(pendingFdRef.current);
+      pendingFdRef.current = null;
+      setWarningState(null);
+    }
+  }
+
+  function handleWarningBack() {
+    pendingFdRef.current = null;
+    setWarningState(null);
+  }
 
   // ── 月移動 ──
   function prevMonth() {
@@ -515,7 +577,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
   const errors = formState?.success === false ? formState.errors : undefined;
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form onSubmit={handleFormSubmit} className="space-y-5">
       <StepIndicator current={3} />
 
       {/* 隠しフィールド */}
@@ -556,116 +618,230 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
         </div>
       )}
 
-      {/* お名前 */}
-      <div>
-        <label htmlFor="reserve-name" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
-          <User size={14} className="text-gray-400" />
-          お名前
-          <span className="ml-1 text-xs font-normal text-red-500">必須</span>
-        </label>
-        <input
-          id="reserve-name"
-          name="name"
-          type="text"
-          required
-          autoComplete="name"
-          placeholder="山田 太郎"
-          defaultValue={prefill?.name ?? ""}
-          className={inputCls + (errors?.name ? " border-red-300 bg-red-50/50" : "")}
-        />
-        {errors?.name && (
-          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-            <AlertCircle size={11} />{errors.name}
-          </p>
-        )}
-      </div>
+      {/* ── マイページ認証済み: ロック表示 ── */}
+      {lockedPatient ? (
+        <div className="space-y-3">
+          {/* 隠し入力（フォーム送信用） */}
+          <input type="hidden" name="patientId" value={lockedPatient.id} />
+          <input type="hidden" name="name"      value={lockedPatient.displayName} />
+          <input type="hidden" name="nameKana"  value={lockedPatient.nameKana ?? ""} />
+          <input type="hidden" name="phone"     value={lockedPatient.phone ?? ""} />
+          {lockedPatient.email && <input type="hidden" name="email" value={lockedPatient.email} />}
 
-      {/* ふりがな */}
-      <div>
-        <label htmlFor="reserve-kana" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
-          <User size={14} className="text-gray-400" />
-          ふりがな
-          <span className="ml-1 text-xs font-normal text-red-500">必須</span>
-        </label>
-        <input
-          id="reserve-kana"
-          name="nameKana"
-          type="text"
-          required
-          autoComplete="off"
-          placeholder="やまだ たろう"
-          defaultValue={prefill?.nameKana ?? ""}
-          className={inputCls + (errors?.nameKana ? " border-red-300 bg-red-50/50" : "")}
-        />
-        {errors?.nameKana && (
-          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-            <AlertCircle size={11} />{errors.nameKana}
-          </p>
-        )}
-      </div>
+          {/* 患者情報カード */}
+          <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-bg)] px-4 py-4">
+            {/* バッジ */}
+            <div className="mb-4 flex items-center gap-1.5">
+              <CheckCircle2 size={15} className="shrink-0 text-[var(--brand-medium)]" />
+              <p className="text-xs font-semibold text-[var(--brand-dark)]">登録情報を使用中</p>
+            </div>
 
-      {/* 電話番号 */}
-      <div>
-        <label htmlFor="reserve-phone" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
-          <Phone size={14} className="text-gray-400" />
-          電話番号
-          <span className="ml-1 text-xs font-normal text-red-500">必須</span>
-        </label>
-        <input
-          id="reserve-phone"
-          name="phone"
-          type="tel"
-          required
-          autoComplete="tel"
-          placeholder="090-1234-5678"
-          defaultValue={prefill?.phone ?? ""}
-          className={inputCls + (errors?.phone ? " border-red-300 bg-red-50/50" : "")}
-        />
-        {errors?.phone && (
-          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-            <AlertCircle size={11} />{errors.phone}
-          </p>
-        )}
-        <p className="mt-1.5 text-xs text-gray-400">
-          診察券のお電話番号を入力するとLINE通知が届きます
-        </p>
-      </div>
+            {/* 情報グリッド */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+              <div>
+                <p className="text-[11px] font-medium text-gray-400">お名前</p>
+                <p className="mt-1 font-semibold text-gray-800">{lockedPatient.displayName}</p>
+              </div>
+              {lockedPatient.nameKana && (
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400">ふりがな</p>
+                  <p className="mt-1 font-medium text-gray-700">{lockedPatient.nameKana}</p>
+                </div>
+              )}
+              {lockedPatient.phone && (
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400">電話番号</p>
+                  <p className="mt-1 font-mono font-medium text-gray-800">{lockedPatient.phone}</p>
+                </div>
+              )}
+              {lockedPatient.email && (
+                <div className="col-span-2">
+                  <p className="text-[11px] font-medium text-gray-400">メールアドレス</p>
+                  <p className="mt-1 break-all font-medium text-gray-700">{lockedPatient.email}</p>
+                </div>
+              )}
+            </div>
 
-      {/* メールアドレス（任意） */}
-      <div>
-        <label htmlFor="reserve-email" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
-          <Mail size={14} className="text-gray-400" />
-          メールアドレス
-          <span className="ml-1 text-xs font-normal text-gray-400">任意</span>
-        </label>
-        <input
-          id="reserve-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="example@mail.com"
-          defaultValue={prefill?.email ?? ""}
-          className={inputCls + (errors?.email ? " border-red-300 bg-red-50/50" : "")}
-        />
-        {errors?.email && (
-          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-            <AlertCircle size={11} />{errors.email}
-          </p>
-        )}
-        <p className="mt-1.5 text-xs text-gray-400">
-          入力するとメールでも通知を受け取れます
-        </p>
-      </div>
+            {/* マイページリンク */}
+            <div className="mt-4 border-t border-[var(--brand-border)] pt-3 flex items-center justify-between">
+              <p className="text-[11px] text-gray-400">登録情報の変更はマイページから行えます</p>
+              <a
+                href={`/${tenantSlug}/mypage`}
+                className="ml-3 shrink-0 text-[11px] font-semibold text-[var(--brand-medium)] underline underline-offset-2 hover:text-[var(--brand-dark)]"
+              >
+                マイページへ →
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ── 通常入力フォーム ── */
+        <div className="space-y-5">
+          {/* お名前 */}
+          <div>
+            <label htmlFor="reserve-name" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <User size={14} className="text-gray-400" />
+              お名前
+              <span className="ml-1 text-xs font-normal text-red-500">必須</span>
+            </label>
+            <input
+              id="reserve-name"
+              name="name"
+              type="text"
+              required
+              autoComplete="name"
+              placeholder="山田 太郎"
+              defaultValue={prefill?.name ?? ""}
+              className={inputCls + (errors?.name ? " border-red-300 bg-red-50/50" : "")}
+            />
+            {errors?.name && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+                <AlertCircle size={11} />{errors.name}
+              </p>
+            )}
+          </div>
 
-      {/* 送信ボタン */}
-      <div className="pt-1">
-        <button type="submit" disabled={isPending} className={btnPrimary}>
-          {isPending
-            ? <><Loader2 size={16} className="animate-spin" />送信中…</>
-            : "予約を申し込む"
-          }
-        </button>
-      </div>
+          {/* ふりがな */}
+          <div>
+            <label htmlFor="reserve-kana" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <User size={14} className="text-gray-400" />
+              ふりがな
+              <span className="ml-1 text-xs font-normal text-red-500">必須</span>
+            </label>
+            <input
+              id="reserve-kana"
+              name="nameKana"
+              type="text"
+              required
+              autoComplete="off"
+              placeholder="やまだ たろう"
+              defaultValue={prefill?.nameKana ?? ""}
+              className={inputCls + (errors?.nameKana ? " border-red-300 bg-red-50/50" : "")}
+            />
+            {errors?.nameKana && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+                <AlertCircle size={11} />{errors.nameKana}
+              </p>
+            )}
+          </div>
+
+          {/* 電話番号 */}
+          <div>
+            <label htmlFor="reserve-phone" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <Phone size={14} className="text-gray-400" />
+              電話番号
+              <span className="ml-1 text-xs font-normal text-red-500">必須</span>
+            </label>
+            <input
+              id="reserve-phone"
+              name="phone"
+              type="tel"
+              required
+              autoComplete="tel"
+              placeholder="090-1234-5678"
+              defaultValue={prefill?.phone ?? ""}
+              className={inputCls + (errors?.phone ? " border-red-300 bg-red-50/50" : "")}
+            />
+            {errors?.phone && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+                <AlertCircle size={11} />{errors.phone}
+              </p>
+            )}
+            <p className="mt-1.5 text-xs text-gray-400">
+              診察券のお電話番号を入力するとLINE通知が届きます
+            </p>
+          </div>
+
+          {/* メールアドレス（任意） */}
+          <div>
+            <label htmlFor="reserve-email" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <Mail size={14} className="text-gray-400" />
+              メールアドレス
+              <span className="ml-1 text-xs font-normal text-gray-400">任意</span>
+            </label>
+            <input
+              id="reserve-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="example@mail.com"
+              defaultValue={prefill?.email ?? ""}
+              className={inputCls + (errors?.email ? " border-red-300 bg-red-50/50" : "")}
+            />
+            {errors?.email && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+                <AlertCircle size={11} />{errors.email}
+              </p>
+            )}
+            <p className="mt-1.5 text-xs text-gray-400">
+              入力するとメールでも通知を受け取れます
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── 警告パネル（照合不一致時） ── */}
+      {warningState && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+            <div className="space-y-1.5">
+              <p className="text-sm font-semibold text-amber-800">
+                {warningState.type === "not_found"
+                  ? "この電話番号は未登録です"
+                  : "お名前が登録情報と異なります"}
+              </p>
+              {warningState.type === "not_found" ? (
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  入力された電話番号はまだ登録されていません。<br />
+                  新規患者として予約を続けてもよいですか？
+                </p>
+              ) : (
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  登録されているお名前は
+                  <span className="mx-0.5 font-semibold">「{warningState.registeredName}」</span>様です。<br />
+                  入力されたお名前で続けますか？
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2 pt-0.5">
+            <button
+              type="button"
+              onClick={handleWarningBack}
+              className="flex flex-1 items-center justify-center gap-1.5 h-10 rounded-xl border border-amber-300 bg-white text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-50 active:bg-amber-100"
+            >
+              <ChevronLeft size={13} />
+              {warningState.type === "not_found" ? "電話番号を修正" : "お名前を修正"}
+            </button>
+            <button
+              type="button"
+              onClick={handleWarningConfirm}
+              disabled={isPending}
+              className="flex flex-1 items-center justify-center gap-1.5 h-10 rounded-xl bg-amber-500 text-xs font-semibold text-white transition-colors hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50"
+            >
+              {isPending
+                ? <Loader2 size={13} className="animate-spin" />
+                : null}
+              {warningState.type === "not_found" ? "新規患者として予約" : "このまま予約する"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 送信ボタン（警告表示中は非表示） */}
+      {!warningState && (
+        <div className="pt-1">
+          <button type="submit" disabled={isPending || isChecking} className={btnPrimary}>
+            {isPending
+              ? <><Loader2 size={16} className="animate-spin" />送信中…</>
+              : isChecking
+              ? <><Loader2 size={16} className="animate-spin" />確認中…</>
+              : "予約を申し込む"
+            }
+          </button>
+        </div>
+      )}
 
       <button type="button" onClick={() => setStep(2)} className={btnOutline + " w-full"}>
         <ChevronLeft size={14} />

@@ -7,8 +7,9 @@
 
 import crypto from "node:crypto";
 
-export const COOKIE_NAME    = "chiro_mp";
-export const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30日（秒）
+export const COOKIE_NAME      = "chiro_mp";
+export const SESSION_MAX_AGE  = 30 * 24 * 60 * 60; // 30日（秒）
+const        RESERVE_TOKEN_TTL = 30 * 60;           // 30分（秒）
 
 interface SessionPayload {
   patientId: string;
@@ -22,6 +23,20 @@ function getSecret(): string {
 
 function sign(data: string): string {
   return crypto.createHmac("sha256", getSecret()).update(data).digest("base64url");
+}
+
+/**
+ * 予約フォームへの患者情報ロック用の短命トークン（30分）を生成する。
+ * マイページから予約フォームへ遷移する際に ?rt= パラメータとして使用する。
+ */
+export function createReserveToken(patientId: string, tenantId: string): string {
+  const payload: SessionPayload = {
+    patientId,
+    tenantId,
+    exp: Math.floor(Date.now() / 1000) + RESERVE_TOKEN_TTL,
+  };
+  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${data}.${sign(data)}`;
 }
 
 export function createSessionToken(patientId: string, tenantId: string): string {

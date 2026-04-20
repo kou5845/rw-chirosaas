@@ -18,7 +18,7 @@ import {
   Phone, MapPin, CalendarDays, Clock, Activity, ChevronRight, Sparkles,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken, COOKIE_NAME } from "@/lib/mypage-session";
+import { verifySessionToken, createReserveToken, COOKIE_NAME } from "@/lib/mypage-session";
 import { GrowthChart } from "./[token]/GrowthChart";
 import { MediaGallery } from "./[token]/MediaGallery";
 import { AppointmentHistory } from "./[token]/AppointmentHistory";
@@ -187,13 +187,9 @@ export default async function MypageIndexPage({ params }: Props) {
   const metricsConfig  = parseMetricsConfig(tenant.trainingMetricsConfig);
   const nextConfirmed  = upcoming.find((a) => a.status === "confirmed");
 
-  // 予約フォームURL（患者情報をクエリパラメータで渡して自動入力）
-  const reserveParams = new URLSearchParams();
-  if (patient.displayName) reserveParams.set("name",  patient.displayName);
-  if (patient.nameKana)    reserveParams.set("kana",  patient.nameKana);
-  if (patient.phone)       reserveParams.set("phone", patient.phone);
-  if (patient.email)       reserveParams.set("email", patient.email);
-  const reserveUrl = `/${slug}/reserve?${reserveParams.toString()}`;
+  // 予約フォームURL（署名付き短命トークンで患者を識別・入力をロック）
+  const reserveToken = createReserveToken(patient.id, tenant.id);
+  const reserveUrl = `/${slug}/reserve?rt=${encodeURIComponent(reserveToken)}`;
 
   function serializeAppt(a: (typeof allAppointments)[number]) {
     return {
