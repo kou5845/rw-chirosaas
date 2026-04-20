@@ -9,11 +9,12 @@
 import { notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { ReserveForm, type BusinessHourSummary, type ServiceSummary } from "./ReserveForm";
+import { verifySessionToken } from "@/lib/mypage-session";
+import { ReserveForm, type BusinessHourSummary, type ServiceSummary, type LockedPatient } from "./ReserveForm";
 
 type Props = {
   params:       Promise<{ tenantId: string }>;
-  searchParams: Promise<{ name?: string; kana?: string; phone?: string; email?: string }>;
+  searchParams: Promise<{ name?: string; kana?: string; phone?: string; email?: string; rt?: string }>;
 };
 
 export async function generateMetadata({ params }: Props) {
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: Props) {
 
 export default async function ReservePage({ params, searchParams }: Props) {
   const { tenantId: slug } = await params;
-  const { name, kana, phone: prefillPhone, email: prefillEmail } = await searchParams;
+  const { name, kana, phone: prefillPhone, email: prefillEmail, rt } = await searchParams;
 
   // CLAUDE.md: tenantId は DB 照合で確定
   const tenant = await prisma.tenant.findUnique({
@@ -38,6 +39,19 @@ export default async function ReservePage({ params, searchParams }: Props) {
   });
 
   if (!tenant || !tenant.isActive) notFound();
+
+  // マイページからの遷移: 署名付きトークンで患者を識別し、フィールドをロック
+  let lockedPatient: LockedPatient | null = null;
+  if (rt) {
+    const session = verifySessionToken(decodeURIComponent(rt));
+    if (session && session.tenantId === tenant.id) {
+      const patient = await prisma.patient.findFirst({
+        where:  { id: session.patientId, tenantId: tenant.id, isActive: true },
+        select: { id: true, displayName: true, nameKana: true, phone: true, email: true },
+      });
+      if (patient) lockedPatient = patient;
+    }
+  }
 
   // 曜日別営業フラグのみ取得（実際のスロット可否は Client からの Server Action で判定）
   const rawHours = await prisma.businessHour.findMany({
@@ -104,7 +118,8 @@ export default async function ReservePage({ params, searchParams }: Props) {
             address={tenant.address}
             lineEnabled={tenant.lineEnabled}
             lineFriendUrl={tenant.lineFriendUrl}
-            prefill={{
+            lockedPatient={lockedPatient ?? undefined}
+            prefill={lockedPatient ? undefined : {
               name:     name,
               nameKana: kana,
               phone:    prefillPhone,

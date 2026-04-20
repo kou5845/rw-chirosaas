@@ -79,6 +79,53 @@ export async function getAvailableSlots(
   return { slots: available };
 }
 
+// ── 患者照合チェック ────────────────────────────────────────────────
+
+export type PatientCheckStatus = "matched" | "name_mismatch" | "not_found";
+
+export type PatientCheckResult = {
+  status:         PatientCheckStatus;
+  registeredName?: string;
+};
+
+/**
+ * 電話番号で患者を検索し、名前の一致も確認する。
+ * 予約送信前に Client から呼び出して警告を表示するために使う。
+ * 患者は作成しない（副作用なし）。
+ */
+export async function checkPatientMatch(
+  tenantSlug: string,
+  phone:      string,
+  name:       string,
+): Promise<PatientCheckResult> {
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: tenantSlug },
+    select: { id: true },
+  });
+  if (!tenant) return { status: "not_found" };
+
+  const normalizedInput = phone.replace(/[\-\s]/g, "");
+
+  const allPatients = await prisma.patient.findMany({
+    where:  { tenantId: tenant.id, isActive: true },
+    select: { phone: true, displayName: true },
+  });
+
+  const matched = allPatients.find(
+    (p) => p.phone && p.phone.replace(/[\-\s]/g, "") === normalizedInput
+  );
+
+  if (!matched) return { status: "not_found" };
+
+  // 名前の正規化比較（スペース除去・小文字化）
+  const norm = (s: string) => s.replace(/[\s　]/g, "").toLowerCase();
+  if (norm(name) !== norm(matched.displayName ?? "")) {
+    return { status: "name_mismatch", registeredName: matched.displayName ?? undefined };
+  }
+
+  return { status: "matched" };
+}
+
 // ── 予約送信 ─────────────────────────────────────────────────────────
 
 export type PublicReservationState = {
