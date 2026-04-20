@@ -195,6 +195,50 @@ export async function sendRejectionEmail(params: SendRejectionEmailParams): Prom
   }
 }
 
+// ── セキュリティ通知メール ────────────────────────────────────────────
+
+/**
+ * プロフィール変更などのセキュリティ通知メールをシンプルな HTML で送信する。
+ * 予約系 React テンプレートに依存しないため、任意の subject / body を使用できる。
+ */
+export async function sendSecurityEmail(params: {
+  to:         string;
+  subject:    string;
+  tenantName: string;
+  bodyHtml:   string;
+}): Promise<void> {
+  const { to, subject, tenantName, bodyHtml } = params;
+  const from   = `${tenantName} <${process.env.EMAIL_FROM ?? "noreply@resend.dev"}>`;
+  const resend = getResend();
+
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+        <tr><td style="background:#3b82f6;padding:20px 28px;">
+          <p style="margin:0;color:#ffffff;font-size:13px;font-weight:600;letter-spacing:0.05em;">${tenantName}</p>
+        </td></tr>
+        <tr><td style="padding:28px;">
+          ${bodyHtml}
+        </td></tr>
+        <tr><td style="padding:16px 28px;border-top:1px solid #f3f4f6;background:#f9fafb;">
+          <p style="margin:0;color:#9ca3af;font-size:11px;">${tenantName} 患者サービス — このメールは自動送信されています</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const { error } = await resend.emails.send({ from, to, subject, html });
+  if (error) {
+    throw new Error(`[email.ts] Resend API エラー（security）: ${JSON.stringify(error)}`);
+  }
+}
+
 export type SendCancellationEmailParams = Omit<ReservationEmailProps, "type"> & {
   to: string;
 };
