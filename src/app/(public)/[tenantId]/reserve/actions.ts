@@ -144,45 +144,75 @@ export async function submitPublicReservation(
   }
   const endAt = new Date(startAt.getTime() + (durationMin + intervalMin) * 60 * 1000);
 
-  // ── 患者を電話番号で検索（正規化比較） → 未登録なら新規作成 ──
-  const normalizedInput = phone.replace(/[\-\s]/g, "");
+  // ── 患者特定：トリプル・ガード方式 ──────────────────────────────────
+  //
+  // 【ガード1】patientId が渡された場合（マイページログイン済み）
+  //   → 電話番号照合をスキップし、DB でテナント帰属のみ確認して使用する。
+  //
+  // 【ガード2】ゲスト照合（patientId なし）
+  //   → 電話番号 AND 名前（displayName）の両方が一致する場合のみ既存患者と判定。
+  //   → 電話番号が合っても名前が違う場合は新規作成に倒す（同姓同名でない限り別人）。
+  //   → 候補が複数存在する場合も新規作成に倒し、スタッフが後から名寄せできるようにする。
+  //
+  // 【ガード3】データ不変性
+  //   → 既存患者と判定されても、フォーム入力で患者マスターを更新しない。
 
-  const allPatients = await prisma.patient.findMany({
-    where:  { tenantId: tenant.id, isActive: true },
-    select: { id: true, phone: true, email: true },
-  });
-  const matched = allPatients.find(
-    (p) => p.phone && p.phone.replace(/[\-\s]/g, "") === normalizedInput
-  );
+  const patientIdParam = (formData.get("patientId") as string | null)?.trim() || null;
 
   let patientId: string;
-  if (matched) {
-    patientId = matched.id;
-    // 既存患者にメールが未設定で今回入力された場合は更新
-    if (email && !matched.email) {
-      await prisma.patient.update({
-        where: { id: matched.id },
-        data:  { email },
-      }).catch(() => {
-        // unique 制約違反（別患者が同メールを持つ）は無視して続行
-      });
+
+  if (patientIdParam) {
+    // ── ガード1: ログイン済み patientId を優先 ──
+    const existing = await prisma.patient.findFirst({
+      where:  { id: patientIdParam, tenantId: tenant.id, isActive: true },
+      select: { id: true },
+    });
+    if (!existing) {
+      return { errors: { general: "患者情報が見つかりません。再度ログインしてお試しください。" } };
     }
-    // マイページトークンが未発行なら自動発行（通知に使用するため）
-    ensurePatientAccessToken(matched.id, tenant.id).catch((e) => {
+    patientId = existing.id;
+    ensurePatientAccessToken(patientId, tenant.id).catch((e) => {
       console.error("[reserve/actions] accessToken 自動発行失敗:", e);
     });
   } else {
-    const created = await prisma.patient.create({
-      data: {
-        tenantId:    tenant.id,
-        displayName: name,
-        nameKana:    nameKana ?? undefined,
-        phone:       phone,
-        email:       email ?? undefined,
-        accessToken: crypto.randomUUID(),
-      },
+    // ── ガード2: 電話番号 + 名前の両方一致で照合 ──
+    const normalizedPhone = phone.replace(/[\-\s]/g, "");
+    const normalizedName  = name.replace(/[\s\u3000]/g, ""); // 全角スペースも除去
+
+    const phoneCandidates = await prisma.patient.findMany({
+      where:  { tenantId: tenant.id, isActive: true },
+      select: { id: true, phone: true, displayName: true },
     });
-    patientId = created.id;
+
+    const matched = phoneCandidates.filter(
+      (p) =>
+        p.phone &&
+        p.phone.replace(/[\-\s]/g, "") === normalizedPhone &&
+        p.displayName.replace(/[\s\u3000]/g, "") === normalizedName
+    );
+
+    if (matched.length === 1) {
+      // 電話番号・名前ともに一致する患者が1名 → 既存患者として紐付け
+      // ガード3: 患者マスターは更新しない
+      patientId = matched[0].id;
+      ensurePatientAccessToken(patientId, tenant.id).catch((e) => {
+        console.error("[reserve/actions] accessToken 自動発行失敗:", e);
+      });
+    } else {
+      // 一致なし・電話番号のみ一致・複数候補 → 新規患者として作成
+      // スタッフが管理画面から後で名寄せできる
+      const created = await prisma.patient.create({
+        data: {
+          tenantId:    tenant.id,
+          displayName: name,
+          nameKana:    nameKana ?? undefined,
+          phone:       phone,
+          email:       email ?? undefined,
+          accessToken: crypto.randomUUID(),
+        },
+      });
+      patientId = created.id;
+    }
   }
 
   // ── 共通サービスに委譲 ──
