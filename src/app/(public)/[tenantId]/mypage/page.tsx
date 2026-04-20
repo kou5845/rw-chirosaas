@@ -15,7 +15,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import {
-  Phone, MapPin, CalendarDays, Clock, Activity, ChevronRight, Sparkles,
+  Phone, MapPin, CalendarDays, Clock, Activity, ChevronRight, Sparkles, UserCircle,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken, createReserveToken, COOKIE_NAME } from "@/lib/mypage-session";
@@ -23,6 +23,7 @@ import { GrowthChart } from "./[token]/GrowthChart";
 import { MediaGallery } from "./[token]/MediaGallery";
 import { AppointmentHistory } from "./[token]/AppointmentHistory";
 import { MypageLogoutButton } from "./MypageLogoutButton";
+import { ProfileForm } from "./ProfileForm";
 import { parseMetricsConfig, type BodyCompDataPoint } from "@/lib/training-metrics";
 
 type Props = {
@@ -326,6 +327,17 @@ export default async function MypageIndexPage({ params }: Props) {
           </Section>
         )}
 
+        {/* 登録情報の確認・変更 */}
+        <Section id="profile" icon={<UserCircle size={14} />} title="登録情報の確認・変更">
+          <ProfileForm
+            tenantSlug={slug}
+            displayName={patient.displayName}
+            nameKana={patient.nameKana}
+            phone={patient.phone}
+            email={patient.email}
+          />
+        </Section>
+
         {/* 医院情報 */}
         <Section icon={<MapPin size={14} />} title="医院情報">
           <div className="space-y-3">
@@ -379,14 +391,16 @@ export default async function MypageIndexPage({ params }: Props) {
 function Section({
   icon,
   title,
+  id,
   children,
 }: {
   icon:     React.ReactNode;
   title:    string;
+  id?:      string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+    <div id={id} className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm scroll-mt-4">
       <div className="flex items-center gap-2.5 border-b border-gray-100 px-5 py-4">
         <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-[var(--brand-bg)] text-[var(--brand-dark)]">
           {icon}
