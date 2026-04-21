@@ -11,6 +11,7 @@ import { CalendarDays } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken } from "@/lib/mypage-session";
 import { ReserveForm, type BusinessHourSummary, type ServiceSummary, type LockedPatient } from "./ReserveForm";
+import { ReserveTriage } from "./ReserveTriage";
 
 type Props = {
   params:       Promise<{ tenantId: string }>;
@@ -89,44 +90,61 @@ export default async function ReservePage({ params, searchParams }: Props) {
       {/* ── メインコンテンツ ── */}
       <main className="mx-auto max-w-lg px-4 py-6">
 
-        {/* 説明バナー */}
-        <div className="mb-5 rounded-2xl border border-[var(--brand-border)] bg-white px-4 py-4 sm:px-5">
-          <p className="text-sm font-semibold text-gray-700">ご予約の流れ</p>
-          <ol className="mt-2 space-y-1 text-xs text-gray-500 list-none">
-            <li className="flex items-center gap-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">1</span>
-              ご希望の日付・時間を選択してください
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">2</span>
-              お名前と電話番号を入力して申し込みください
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">3</span>
-              スタッフ確認後、LINE または電話でご連絡します
-            </li>
-          </ol>
-        </div>
+        {lockedPatient ? (
+          /* ── 既存患者フロー: ?rt=<token> でロック済み ── */
+          <>
+            {/* 説明バナー */}
+            <div className="mb-5 rounded-2xl border border-[var(--brand-border)] bg-white px-4 py-4 sm:px-5">
+              <p className="text-sm font-semibold text-gray-700">ご予約の流れ</p>
+              <ol className="mt-2 space-y-1 text-xs text-gray-500 list-none">
+                <li className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">1</span>
+                  ご希望の日付・時間を選択してください
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">2</span>
+                  登録情報を確認して申し込みください
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-light)] text-[10px] font-bold text-[var(--brand-dark)]">3</span>
+                  スタッフ確認後、LINE または電話でご連絡します
+                </li>
+              </ol>
+            </div>
 
-        {/* フォームカード */}
-        <div className="rounded-2xl border border-gray-100 bg-white px-4 py-5 shadow-sm sm:px-5 sm:py-6">
-          <ReserveForm
+            {/* フォームカード */}
+            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-5 shadow-sm sm:px-5 sm:py-6">
+              <ReserveForm
+                tenantSlug={slug}
+                businessHours={businessHours}
+                services={services}
+                phone={tenant.phone}
+                address={tenant.address}
+                lineEnabled={tenant.lineEnabled}
+                lineFriendUrl={tenant.lineFriendUrl}
+                lockedPatient={lockedPatient}
+              />
+            </div>
+          </>
+        ) : (
+          /* ── 振り分け画面: 初診 / 再診 を選択 ── */
+          <ReserveTriage
             tenantSlug={slug}
+            clinicName={tenant.name}
             businessHours={businessHours}
             services={services}
             phone={tenant.phone}
             address={tenant.address}
             lineEnabled={tenant.lineEnabled}
             lineFriendUrl={tenant.lineFriendUrl}
-            lockedPatient={lockedPatient ?? undefined}
-            prefill={lockedPatient ? undefined : {
+            prefill={{
               name:     name,
               nameKana: kana,
               phone:    prefillPhone,
               email:    prefillEmail,
             }}
           />
-        </div>
+        )}
 
         {tenant.phone ? (
           <p className="mt-5 text-center text-xs text-gray-400">
