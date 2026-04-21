@@ -233,10 +233,20 @@ export async function sendSecurityEmail(params: {
 </body>
 </html>`;
 
-  const { error } = await resend.emails.send({ from, to, subject, html });
+  const apiKeyHead = process.env.RESEND_API_KEY?.slice(0, 6) ?? "(未設定)";
+  console.log("[email.ts] DEBUG sendSecurityEmail");
+  console.log("  RESEND_API_KEY 先頭6文字:", apiKeyHead);
+  console.log("  EMAIL_FROM env:", process.env.EMAIL_FROM ?? "(未設定)");
+  console.log("  from:", from);
+  console.log("  to:", to);
+  console.log("  subject:", subject);
+
+  const { data, error } = await resend.emails.send({ from, to, subject, html });
   if (error) {
+    console.error("[email.ts] Resend API エラー（security）:", JSON.stringify(error));
     throw new Error(`[email.ts] Resend API エラー（security）: ${JSON.stringify(error)}`);
   }
+  console.log("[email.ts] sendSecurityEmail 成功 id:", data?.id);
 }
 
 export type SendCancellationEmailParams = Omit<ReservationEmailProps, "type"> & {

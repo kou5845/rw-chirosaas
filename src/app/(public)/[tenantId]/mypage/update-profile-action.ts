@@ -86,8 +86,10 @@ export async function updatePatientProfile(
 
   revalidatePath(`/${tenantSlug}/mypage`);
 
-  // ── 通知（すべて fire-and-forget。失敗しても更新は成功扱い）──────
+  // ── 通知（失敗しても更新は成功扱い。ただし必ず await して完了させる）──────
   const emailChanged = email !== prevEmail;
+
+  console.log("[updatePatientProfile] emailChanged:", emailChanged, "| prevEmail:", prevEmail, "| newEmail:", email);
 
   if (emailChanged) {
     const bodyNew = `
@@ -116,27 +118,36 @@ export async function updatePatientProfile(
         本メールはセキュリティ上の記録としてお送りしています。
       </p>`;
 
+    const emailJobs: Promise<void>[] = [];
+
     if (email) {
-      sendSecurityEmail({
-        to:         email,
-        subject:    "【重要】メールアドレス変更完了のお知らせ",
-        tenantName: tenant.name,
-        bodyHtml:   bodyNew,
-      }).catch((e: unknown) =>
-        console.error("[updatePatientProfile] 新メール通知失敗:", e)
+      emailJobs.push(
+        sendSecurityEmail({
+          to:         email,
+          subject:    "【重要】メールアドレス変更完了のお知らせ",
+          tenantName: tenant.name,
+          bodyHtml:   bodyNew,
+        }).catch((e: unknown) =>
+          console.error("[updatePatientProfile] 新メール通知失敗:", e)
+        ),
       );
     }
 
     if (prevEmail) {
-      sendSecurityEmail({
-        to:         prevEmail,
-        subject:    "【重要】メールアドレス変更のお知らせ",
-        tenantName: tenant.name,
-        bodyHtml:   bodyOld,
-      }).catch((e: unknown) =>
-        console.error("[updatePatientProfile] 旧メール通知失敗:", e)
+      emailJobs.push(
+        sendSecurityEmail({
+          to:         prevEmail,
+          subject:    "【重要】メールアドレス変更のお知らせ",
+          tenantName: tenant.name,
+          bodyHtml:   bodyOld,
+        }).catch((e: unknown) =>
+          console.error("[updatePatientProfile] 旧メール通知失敗:", e)
+        ),
       );
     }
+
+    await Promise.all(emailJobs);
+    console.log("[updatePatientProfile] メール送信完了（成功/失敗ともに）");
   }
 
   if (lineUserId && tenant.lineEnabled) {
