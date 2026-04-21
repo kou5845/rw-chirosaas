@@ -1,12 +1,12 @@
 "use server";
 
 /**
- * 既存患者向け予約フォームへのログイン Server Action
+ * 2回目以降の方向け 予約フォームへのログイン Server Action
  *
- * マイページの loginMypage と同じ認証方式（生年月日 × 暗証番号）だが、
- * セッション Cookie を設定せず、30 分有効の reserve token を発行して
+ * マイページと同じ認証方式（生年月日 × accessPin）だが、
+ * セッション Cookie は設定せず 30 分有効の reserve token を発行し
  * /[slug]/reserve?rt=<token> へリダイレクトする。
- * これにより ReserveForm が既存患者情報をロック表示する。
+ * ReserveForm が既存患者情報をロック表示する。
  */
 
 import { redirect } from "next/navigation";

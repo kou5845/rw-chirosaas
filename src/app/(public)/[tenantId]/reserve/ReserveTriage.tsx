@@ -1,27 +1,22 @@
 "use client";
 
 /**
- * 予約フォーム 振り分け画面（初診 / 再診）
+ * 予約フォーム 振り分け画面（初めての方 / 2回目以降の方）
  *
  * モード:
- *   "select" → 初めての方 / 診察券をお持ちの方 の選択カード
- *   "login"  → 既存患者ログインフォーム（生年月日 × 暗証番号）
- *   "guest"  → ゲスト予約フォーム（ReserveForm をそのまま表示）
+ *   "select" → 2つの選択カード
+ *   "login"  → 2回目以降の方ログインフォーム（生年月日 × 暗証番号）
+ *   "guest"  → 初めての方 → ReserveForm をそのまま表示
  *
- * ログイン成功時は loginForReserve Server Action が ?rt=<token> へリダイレクトする。
+ * ログイン成功時は loginForReserve が ?rt=<token> へリダイレクト。
  * page.tsx 側で rt を検出して lockedPatient を渡す既存フローへ合流する。
  */
 
 import { useState } from "react";
 import { useActionState } from "react";
 import {
-  ArrowLeft,
-  ChevronRight,
-  CreditCard,
-  Loader2,
-  AlertCircle,
-  Lock,
-  Sparkles,
+  ArrowLeft, ChevronRight, CreditCard, Loader2,
+  AlertCircle, Lock, Sparkles,
 } from "lucide-react";
 import {
   ReserveForm,
@@ -167,7 +162,7 @@ function TriageSelect({
           />
         </button>
 
-        {/* ── 診察券をお持ちの方 ── */}
+        {/* ── 2回目以降の方 ── */}
         <button
           type="button"
           onClick={onLogin}
@@ -182,12 +177,12 @@ function TriageSelect({
               Returning Patient
             </p>
             <p className="text-lg font-bold leading-tight text-gray-800">
-              診察券をお持ちの方
+              2回目以降の方
             </p>
             <p className="mt-2 text-xs leading-relaxed text-gray-500">
-              生年月日と暗証番号でログインして
+              登録情報を引き継いで
               <br />
-              登録情報を引き継いでご予約
+              スムーズにご予約いただけます
             </p>
           </div>
 
@@ -200,13 +195,13 @@ function TriageSelect({
       </div>
 
       <p className="mt-5 text-center text-[11px] text-gray-300">
-        診察券のログイン情報はスタッフにお問い合わせください
+        ログイン情報はスタッフにお問い合わせください
       </p>
     </div>
   );
 }
 
-// ── ログインフォーム ──────────────────────────────────────────────────────
+// ── ログインフォーム（2回目以降の方） ────────────────────────────────────
 
 function TriageLoginForm({
   tenantSlug,
@@ -222,7 +217,6 @@ function TriageLoginForm({
 
   return (
     <div>
-
       {/* 戻るボタン */}
       <button
         type="button"
@@ -238,9 +232,9 @@ function TriageLoginForm({
         <p className="mb-1 text-[9px] font-bold tracking-[0.35em] text-[var(--brand-dark)] uppercase">
           Returning Patient
         </p>
-        <h3 className="text-xl font-bold text-gray-800">診察券でログイン</h3>
+        <h3 className="text-xl font-bold text-gray-800">2回目以降の方</h3>
         <p className="mt-1 text-xs text-gray-400">
-          登録情報を引き継いで予約できます
+          登録情報を引き継いでスムーズにご予約いただけます
         </p>
       </div>
 
@@ -297,7 +291,7 @@ function TriageLoginForm({
             className={`${inputBase} tracking-[0.4em] text-center text-lg`}
           />
           <p className="mt-1.5 px-1 text-[11px] text-gray-400">
-            受付でお伝えした4桁の数字
+            初回予約完了メールに記載の4桁の数字
           </p>
         </div>
 
@@ -343,7 +337,7 @@ export function ReserveTriage({
 }: TriageProps) {
   const [mode, setMode] = useState<Mode>("select");
 
-  // ゲストモード: ステップバナー + 通常の予約フォーム
+  // 初めての方モード: ステップバナー + 通常の予約フォーム
   if (mode === "guest") {
     return (
       <>
