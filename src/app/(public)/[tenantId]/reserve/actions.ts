@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import { createReservation } from "@/services/reservationService";
 import { ensurePatientAccessToken } from "@/lib/mypage";
+import { sendSecurityEmail } from "@/lib/email";
 
 // ── 利用可能なタイムスロット取得 ─────────────────────────────────────
 
@@ -84,7 +85,7 @@ export async function getAvailableSlots(
 export type PatientCheckStatus = "matched" | "name_mismatch" | "not_found";
 
 export type PatientCheckResult = {
-  status:         PatientCheckStatus;
+  status:          PatientCheckStatus;
   registeredName?: string;
 };
 
@@ -130,8 +131,24 @@ export async function checkPatientMatch(
 
 export type PublicReservationState = {
   success?: boolean;
-  errors?: { general?: string; name?: string; nameKana?: string; phone?: string; email?: string };
+  errors?: {
+    general?:   string;
+    name?:      string;
+    nameKana?:  string;
+    birthDate?: string;
+    phone?:     string;
+    email?:     string;
+  };
 } | null;
+
+// アプリ BaseURL（通知メール内リンク用）
+function getBaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_APP_URL;
+  if (url) return url.replace(/\/$/, "");
+  const vercelUrl = process.env.VERCEL_URL;
+  if (vercelUrl) return `https://${vercelUrl}`;
+  return "http://localhost:3000";
+}
 
 export async function submitPublicReservation(
   _prev: PublicReservationState,
@@ -144,10 +161,14 @@ export async function submitPublicReservation(
   const nameKana      = (formData.get("nameKana")      as string | null)?.trim() || null;
   const phone         = (formData.get("phone")         as string | null)?.trim() ?? "";
   const email         = (formData.get("email")         as string | null)?.trim() || null;
+  const birthDateRaw  = (formData.get("birthDate")     as string | null)?.trim() ?? "";
   const menuNameRaw   = (formData.get("menuName")      as string | null)?.trim() || null;
   const durationRaw   = (formData.get("durationMin")   as string | null)?.trim() ?? "";
   const intervalRaw   = (formData.get("intervalMin")   as string | null)?.trim() ?? "";
   const priceRaw      = (formData.get("price")         as string | null)?.trim() ?? "";
+
+  // patientId が付いている場合はトリアージログイン済み（2回目以降）
+  const patientIdParam = (formData.get("patientId") as string | null)?.trim() || null;
 
   // ── 入力バリデーション ──
   if (!tenantSlug || !dateStr || !timeStr) {
@@ -166,10 +187,17 @@ export async function submitPublicReservation(
     return { errors: { email: "正しいメールアドレスを入力してください。" } };
   }
 
+  // 生年月日: 新規患者フォーム（patientIdParam なし）の場合のみ必須
+  if (!patientIdParam) {
+    if (!/^\d{8}$/.test(birthDateRaw)) {
+      return { errors: { birthDate: "生年月日を8桁の数字で入力してください（例: 19830405）。" } };
+    }
+  }
+
   // ── DB 照合でテナントIDを確定 ──
   const tenant = await prisma.tenant.findUnique({
     where:  { subdomain: tenantSlug },
-    select: { id: true, slotInterval: true },
+    select: { id: true, name: true, slotInterval: true },
   });
   if (!tenant) return { errors: { general: "医院情報が見つかりません。" } };
 
@@ -191,63 +219,65 @@ export async function submitPublicReservation(
   }
   const endAt = new Date(startAt.getTime() + (durationMin + intervalMin) * 60 * 1000);
 
-  // ── 患者特定：トリプル・ガード方式 ──────────────────────────────────
-  //
-  // 【ガード1】patientId が渡された場合（マイページログイン済み）
-  //   → 電話番号照合をスキップし、DB でテナント帰属のみ確認して使用する。
-  //
-  // 【ガード2】ゲスト照合（patientId なし）
-  //   → 電話番号 AND 名前（displayName）の両方が一致する場合のみ既存患者と判定。
-  //   → 電話番号が合っても名前が違う場合は新規作成に倒す（同姓同名でない限り別人）。
-  //   → 候補が複数存在する場合も新規作成に倒し、スタッフが後から名寄せできるようにする。
-  //
-  // 【ガード3】データ不変性
-  //   → 既存患者と判定されても、フォーム入力で患者マスターを更新しない。
+  // ── 患者識別（3段階ガード）──────────────────────────────────────────
+  let patientId:   string;
+  let isNewPatient = false;
+  let newPatientPin: string | null = null;
 
-  const patientIdParam = (formData.get("patientId") as string | null)?.trim() || null;
-
-  let patientId: string;
-
+  // Guard 1: patientId 指定あり（トリアージログイン済み or ロック患者）
   if (patientIdParam) {
-    // ── ガード1: ログイン済み patientId を優先 ──
-    const existing = await prisma.patient.findFirst({
+    const verified = await prisma.patient.findFirst({
       where:  { id: patientIdParam, tenantId: tenant.id, isActive: true },
       select: { id: true },
     });
-    if (!existing) {
-      return { errors: { general: "患者情報が見つかりません。再度ログインしてお試しください。" } };
+    if (!verified) {
+      return { errors: { general: "患者情報の確認に失敗しました。最初からやり直してください。" } };
     }
-    patientId = existing.id;
-    ensurePatientAccessToken(patientId, tenant.id).catch((e) => {
+    patientId = verified.id;
+    ensurePatientAccessToken(verified.id, tenant.id).catch((e) => {
       console.error("[reserve/actions] accessToken 自動発行失敗:", e);
     });
+
   } else {
-    // ── ガード2: 電話番号 + 名前の両方一致で照合 ──
-    const normalizedPhone = phone.replace(/[\-\s]/g, "");
-    const normalizedName  = name.replace(/[\s\u3000]/g, ""); // 全角スペースも除去
+    // Guard 2: 電話番号で既存患者を検索
+    const normalizedInput = phone.replace(/[\-\s]/g, "");
 
-    const phoneCandidates = await prisma.patient.findMany({
+    const allPatients = await prisma.patient.findMany({
       where:  { tenantId: tenant.id, isActive: true },
-      select: { id: true, phone: true, displayName: true },
+      select: { id: true, phone: true, email: true },
     });
-
-    const matched = phoneCandidates.filter(
-      (p) =>
-        p.phone &&
-        p.phone.replace(/[\-\s]/g, "") === normalizedPhone &&
-        p.displayName.replace(/[\s\u3000]/g, "") === normalizedName
+    const matched = allPatients.find(
+      (p) => p.phone && p.phone.replace(/[\-\s]/g, "") === normalizedInput
     );
 
-    if (matched.length === 1) {
-      // 電話番号・名前ともに一致する患者が1名 → 既存患者として紐付け
-      // ガード3: 患者マスターは更新しない
-      patientId = matched[0].id;
-      ensurePatientAccessToken(patientId, tenant.id).catch((e) => {
+    if (matched) {
+      patientId = matched.id;
+      // 既存患者にメールが未設定で今回入力された場合は更新
+      if (email && !matched.email) {
+        await prisma.patient.update({
+          where: { id: matched.id },
+          data:  { email },
+        }).catch(() => {
+          // unique 制約違反は無視して続行
+        });
+      }
+      ensurePatientAccessToken(matched.id, tenant.id).catch((e) => {
         console.error("[reserve/actions] accessToken 自動発行失敗:", e);
       });
+
     } else {
-      // 一致なし・電話番号のみ一致・複数候補 → 新規患者として作成
-      // スタッフが管理画面から後で名寄せできる
+      // Guard 3: 新規患者作成
+      isNewPatient = true;
+
+      const y = parseInt(birthDateRaw.slice(0, 4), 10);
+      const m = parseInt(birthDateRaw.slice(4, 6), 10);
+      const d = parseInt(birthDateRaw.slice(6, 8), 10);
+      const birthDate = new Date(Date.UTC(y, m - 1, d));
+
+      // 4桁のランダム暗証番号を生成（1000〜9999）
+      const accessPin = String(Math.floor(1000 + Math.random() * 9000));
+      newPatientPin   = accessPin;
+
       const created = await prisma.patient.create({
         data: {
           tenantId:    tenant.id,
@@ -255,6 +285,8 @@ export async function submitPublicReservation(
           nameKana:    nameKana ?? undefined,
           phone:       phone,
           email:       email ?? undefined,
+          birthDate:   birthDate,
+          accessPin:   accessPin,
           accessToken: crypto.randomUUID(),
         },
       });
@@ -275,6 +307,51 @@ export async function submitPublicReservation(
 
   if (!result.success) {
     return { errors: { general: result.error } };
+  }
+
+  // ── 新規患者登録通知（予約完了後に非同期送信）──────────────────────
+  if (isNewPatient && email && newPatientPin) {
+    const y  = parseInt(birthDateRaw.slice(0, 4), 10);
+    const mo = parseInt(birthDateRaw.slice(4, 6), 10);
+    const d  = parseInt(birthDateRaw.slice(6, 8), 10);
+    const bdFormatted = `${y}年${mo}月${d}日`;
+
+    const loginUrl = `${getBaseUrl()}/${tenantSlug}/mypage/login`;
+
+    const bodyHtml = `
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.7;">
+        このたびはご登録いただきありがとうございます。<br />
+        2回目以降のご予約には、以下のログイン情報をご利用ください。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">
+        <tr>
+          <td style="padding:10px 14px;background:#f3f4f6;border-radius:8px 8px 0 0;color:#6b7280;width:50%;">ログインID（生年月日）</td>
+          <td style="padding:10px 14px;color:#111827;font-weight:600;">${bdFormatted}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px;background:#f3f4f6;border-radius:0 0 8px 8px;color:#6b7280;">Access PIN（暗証番号）</td>
+          <td style="padding:10px 14px;color:#111827;font-weight:600;font-size:20px;letter-spacing:0.25em;">${newPatientPin}</td>
+        </tr>
+      </table>
+      <p style="margin:0 0 8px;color:#374151;font-size:14px;">
+        マイページでご予約履歴の確認や登録情報の変更が行えます。
+      </p>
+      <a href="${loginUrl}" style="display:inline-block;padding:10px 20px;background:#5BBAC4;color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
+        マイページへログイン →
+      </a>
+      <p style="margin:16px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">
+        ※ 暗証番号はスタッフにお伝えすることで変更できます。<br />
+        ※ 本メールに心当たりがない場合はお手数ですが当院までご連絡ください。
+      </p>`;
+
+    sendSecurityEmail({
+      to:         email,
+      subject:    "【重要】アカウント登録完了とログイン情報のお知らせ",
+      tenantName: tenant.name,
+      bodyHtml,
+    }).catch((e: unknown) =>
+      console.error("[reserve/actions] 登録通知メール送信失敗:", e)
+    );
   }
 
   return { success: true };

@@ -91,9 +91,8 @@ export default async function ReservePage({ params, searchParams }: Props) {
       <main className="mx-auto max-w-lg px-4 py-6">
 
         {lockedPatient ? (
-          /* ── 既存患者フロー: ?rt=<token> でロック済み ── */
+          /* ── 2回目以降の方（?rt=<token> でロック済み）── */
           <>
-            {/* 説明バナー */}
             <div className="mb-5 rounded-2xl border border-[var(--brand-border)] bg-white px-4 py-4 sm:px-5">
               <p className="text-sm font-semibold text-gray-700">ご予約の流れ</p>
               <ol className="mt-2 space-y-1 text-xs text-gray-500 list-none">
@@ -111,8 +110,6 @@ export default async function ReservePage({ params, searchParams }: Props) {
                 </li>
               </ol>
             </div>
-
-            {/* フォームカード */}
             <div className="rounded-2xl border border-gray-100 bg-white px-4 py-5 shadow-sm sm:px-5 sm:py-6">
               <ReserveForm
                 tenantSlug={slug}
@@ -127,7 +124,7 @@ export default async function ReservePage({ params, searchParams }: Props) {
             </div>
           </>
         ) : (
-          /* ── 振り分け画面: 初診 / 再診 を選択 ── */
+          /* ── 振り分け画面（初めての方 / 2回目以降の方）── */
           <ReserveTriage
             tenantSlug={slug}
             clinicName={tenant.name}
@@ -137,12 +134,7 @@ export default async function ReservePage({ params, searchParams }: Props) {
             address={tenant.address}
             lineEnabled={tenant.lineEnabled}
             lineFriendUrl={tenant.lineFriendUrl}
-            prefill={{
-              name:     name,
-              nameKana: kana,
-              phone:    prefillPhone,
-              email:    prefillEmail,
-            }}
+            prefill={{ name, nameKana: kana, phone: prefillPhone, email: prefillEmail }}
           />
         )}
 

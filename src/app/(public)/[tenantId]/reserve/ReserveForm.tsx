@@ -11,7 +11,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   ChevronLeft, ChevronRight, Clock, CalendarDays,
-  User, Phone, Mail, CheckCircle2, AlertCircle, Loader2, MapPin, MessageCircle,
+  User, Phone, Mail, CheckCircle2, AlertCircle, Loader2, MapPin, MessageCircle, Cake,
 } from "lucide-react";
 import {
   getAvailableSlots, submitPublicReservation, checkPatientMatch,
@@ -725,6 +725,35 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
             )}
           </div>
 
+          {/* 生年月日 */}
+          <div>
+            <label htmlFor="reserve-birthDate" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <Cake size={14} className="text-gray-400" />
+              生年月日
+              <span className="ml-1 text-xs font-normal text-red-500">必須</span>
+            </label>
+            <input
+              id="reserve-birthDate"
+              name="birthDate"
+              type="text"
+              inputMode="numeric"
+              maxLength={8}
+              required
+              autoComplete="bday"
+              placeholder="例: 19830405"
+              className={inputCls + " font-mono tracking-[0.15em]" + (errors?.birthDate ? " border-red-300 bg-red-50/50" : "")}
+            />
+            {errors?.birthDate ? (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+                <AlertCircle size={11} />{errors.birthDate}
+              </p>
+            ) : (
+              <p className="mt-1.5 text-xs text-gray-400">
+                西暦8桁で入力（例: 1983年4月5日 → 19830405）— 次回以降のログインIDとして使用します
+              </p>
+            )}
+          </div>
+
           {/* 電話番号 */}
           <div>
             <label htmlFor="reserve-phone" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
@@ -748,7 +777,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
               </p>
             )}
             <p className="mt-1.5 text-xs text-gray-400">
-              診察券のお電話番号を入力するとLINE通知が届きます
+              ご登録の電話番号を入力するとLINE通知が届きます
             </p>
           </div>
 
