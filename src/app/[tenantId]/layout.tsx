@@ -9,6 +9,7 @@
 
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getTenantBySlug, getTenantFeatures } from "@/lib/tenant-cache";
 import { auth } from "@/auth";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -23,44 +24,25 @@ export default async function DashboardLayout({ children, params }: Props) {
   const { tenantId: slug } = await params;
   const session = await auth();
 
-  // テナントをサブドメイン（URL スラッグ）で検索
-  const tenant = await prisma.tenant.findUnique({
-    where: { subdomain: slug },
-    select: {
-      id:       true,
-      name:     true,
-      isActive: true,
-    },
-  });
-
+  // テナントをサブドメインで検索（5分間キャッシュ: 2回目以降はDBアクセスなし）
+  const tenant = await getTenantBySlug(slug);
   if (!tenant) notFound();
 
-  // テナントが無効化されている場合は即時ブロック（セッション中の即時反映）
+  // テナントが無効化されている場合は即時ブロック
   // proxy.ts は JWT のみ検証しDB呼び出しが行えないため、このレイアウトで DB チェックする
   if (!tenant.isActive) {
     redirect("/login?error=disabled");
   }
 
-  // フィーチャートグルと承認待ち件数を並列取得（直列→並列化でレイテンシ削減）
-  const [trainingFeature, pendingCount] = await Promise.all([
-    prisma.tenantSetting.findUnique({
-      where: {
-        tenantId_featureKey: {
-          tenantId:   tenant.id,
-          featureKey: "training_record",
-        },
-      },
-      select: { featureValue: true },
-    }),
-    // 承認待ち件数（ヘッダーバッジ用）CLAUDE.md 絶対ルール: tenant_id フィルタ必須
+  // 機能フラグ（キャッシュ）と承認待ち件数（リアルタイム）を並列取得
+  const [features, pendingCount] = await Promise.all([
+    // フィーチャートグル: キャッシュ済み（DB アクセスなし）
+    getTenantFeatures(tenant.id),
+    // 承認待ち件数: 常に最新が必要 CLAUDE.md 絶対ルール: tenant_id フィルタ必須
     prisma.appointment.count({
-      where: {
-        tenantId: tenant.id,
-        status: "pending",
-      },
+      where: { tenantId: tenant.id, status: "pending" },
     }),
   ]);
-  const trainingEnabled = trainingFeature?.featureValue === "true";
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F9FAFB]">
@@ -69,7 +51,7 @@ export default async function DashboardLayout({ children, params }: Props) {
         tenantSlug={slug}
         tenantName={tenant.name}
         loginId={session?.user?.loginId}
-        trainingEnabled={trainingEnabled}
+        trainingEnabled={features.trainingEnabled}
       />
 
       {/* メインエリア */}
