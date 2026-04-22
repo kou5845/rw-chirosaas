@@ -314,7 +314,7 @@ export async function submitPublicReservation(
     const y  = parseInt(birthDateRaw.slice(0, 4), 10);
     const mo = parseInt(birthDateRaw.slice(4, 6), 10);
     const d  = parseInt(birthDateRaw.slice(6, 8), 10);
-    const bdFormatted = `${y}年${mo}月${d}日`;
+    const bdFormatted = birthDateRaw;
 
     const loginUrl = `${getBaseUrl()}/${tenantSlug}/mypage/login`;
 
