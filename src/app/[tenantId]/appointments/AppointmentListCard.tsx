@@ -152,7 +152,7 @@ export function AppointmentListCard({
             onClick={() => onToggleSelect?.(appt.id)}
             aria-label={selected ? "選択を解除" : "選択"}
             className={cn(
-              "mt-4 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
+              "mt-4 h-5 w-5 shrink-0 self-start flex items-center justify-center rounded border-2 transition-colors",
               selected
                 ? "border-emerald-500 bg-emerald-500 text-white"
                 : "border-gray-300 bg-white hover:border-emerald-400"
