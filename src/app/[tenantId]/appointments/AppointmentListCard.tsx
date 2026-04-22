@@ -147,23 +147,13 @@ export function AppointmentListCard({
       <div className="flex items-start gap-3">
         {/* チェックボックス（一括承認モード時のみ表示） */}
         {selectable && (
-          <button
-            type="button"
-            onClick={() => onToggleSelect?.(appt.id)}
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect?.(appt.id)}
             aria-label={selected ? "選択を解除" : "選択"}
-            className={cn(
-              "mt-4 h-5 w-5 shrink-0 self-start flex items-center justify-center rounded border-2 transition-colors",
-              selected
-                ? "border-emerald-500 bg-emerald-500 text-white"
-                : "border-gray-300 bg-white hover:border-emerald-400"
-            )}
-          >
-            {selected && (
-              <svg viewBox="0 0 10 8" fill="none" className="h-3 w-3" aria-hidden="true">
-                <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )}
-          </button>
+            className="mt-4 h-5 w-5 shrink-0 self-start cursor-pointer accent-emerald-500"
+          />
         )}
 
       <div
