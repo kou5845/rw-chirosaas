@@ -47,43 +47,45 @@ export default async function KartesPage({ params }: Props) {
   });
   if (!tenant) notFound();
 
-  // ── フィーチャートグル取得 ─────────────────────────────────────
-  const karteFeature = await prisma.tenantSetting.findUnique({
-    where: {
-      tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" },
-    },
-    select: { featureValue: true },
-  });
+  // ── フィーチャートグル & カルテ一覧を並列取得（直列→並列化でレイテンシ削減）──
+  const [karteFeature, kartes] = await Promise.all([
+    prisma.tenantSetting.findUnique({
+      where: {
+        tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" },
+      },
+      select: { featureValue: true },
+    }),
+    // ── カルテ一覧取得（CLAUDE.md 絶対ルール: tenantId フィルタ必須）──
+    prisma.karte.findMany({
+      where: {
+        tenantId: tenant.id, // 他テナントのデータを完全排除
+      },
+      select: {
+        id:                 true,
+        createdAt:          true,
+        karteModeSnapshot:  true,
+        conditionNote:      true,
+        progressNote:       true,
+        conditionStatus:    true,
+        bodyParts:          true,
+        treatments:         true,
+        patient: {
+          select: { id: true, displayName: true },
+        },
+        staff: {
+          select: { name: true },
+        },
+        _count: {
+          select: { exerciseRecords: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
   const isProfessional = karteFeature?.featureValue === "professional";
 
-  // ── カルテ一覧取得（CLAUDE.md 絶対ルール: tenantId フィルタ必須）──
-  const kartes = await prisma.karte.findMany({
-    where: {
-      tenantId: tenant.id, // 他テナントのデータを完全排除
-    },
-    select: {
-      id:                 true,
-      createdAt:          true,
-      karteModeSnapshot:  true,
-      conditionNote:      true,
-      progressNote:       true,
-      conditionStatus:    true,
-      bodyParts:          true,
-      treatments:         true,
-      patient: {
-        select: { id: true, displayName: true },
-      },
-      staff: {
-        select: { name: true },
-      },
-      _count: {
-        select: { exerciseRecords: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
   const totalCount = kartes.length;
+
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
