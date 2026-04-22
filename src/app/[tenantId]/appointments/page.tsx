@@ -68,8 +68,17 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   });
   if (!tenant) notFound();
 
-  // フィーチャートグル（メニュー選択タブ制御用）
-  const [karteFeature, trainingFeature] = await Promise.all([
+  // ── バッチ1: フィーチャートグル・マスタデータ・カウントを並列取得 ──────────
+  // （tenant.id が判明した時点で全て独立して実行可能）
+  const [
+    karteFeature,
+    trainingFeature,
+    servicesRaw,
+    rawHours,
+    staffListRaw,
+    patientListRaw,
+    pendingCount,
+  ] = await Promise.all([
     prisma.tenantSetting.findUnique({
       where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" } },
       select: { featureValue: true },
@@ -78,56 +87,54 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
       where:  { tenantId_featureKey: { tenantId: tenant.id, featureKey: "training_record" } },
       select: { featureValue: true },
     }),
+    // Service マスタ（施術メニュー選択用: 全テナント共通）CLAUDE.md 絶対ルール
+    prisma.service.findMany({
+      where:   { tenantId: tenant.id, isActive: true },
+      select:  { id: true, name: true, duration: true, intervalMin: true, price: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+    // 曜日別営業時間
+    prisma.businessHour.findMany({
+      where:  { tenantId: tenant.id },
+      select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
+    }),
+    // スタッフ一覧（週間ビューの新規予約モーダル + リストビューの編集ダイアログで使用）
+    prisma.staff.findMany({
+      where:   { tenantId: tenant.id, isActive: true },
+      select:  { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    // 患者一覧（週間ビューの新規予約モーダルのみ、isWeekView に関係なく取得して後でフィルタ）
+    isWeekView
+      ? prisma.patient.findMany({
+          where:   { tenantId: tenant.id },
+          select:  { id: true, displayName: true, nameKana: true },
+          orderBy: { displayName: "asc" },
+        })
+      : Promise.resolve([]),
+    // 承認待ちカウント（ビュー共通で使用）CLAUDE.md 絶対ルール
+    prisma.appointment.count({
+      where: { tenantId: tenant.id, status: "pending" },
+    }),
   ]);
+
   const isProfessional  = karteFeature?.featureValue === "professional";
   const trainingEnabled = trainingFeature?.featureValue === "true";
-
-  // Service マスタ取得（施術メニュー選択用: 全テナント共通）
-  const servicesRaw = await prisma.service.findMany({
-    where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
-    select:  { id: true, name: true, duration: true, intervalMin: true, price: true },
-    orderBy: { sortOrder: "asc" },
-  });
   const services: ServiceItem[] = servicesRaw;
+  const businessHours: BusinessHourData[] = rawHours;
+  const staffList = staffListRaw.map(s => ({ id: s.id, displayName: s.name }));
+  const patientList = patientListRaw;
 
-  // Exercise マスタ取得（training_record 有効テナントのみ）
+  // ── バッチ2: Exercise マスタ取得（isProfessional && trainingEnabled の結果に依存）──
+  // Exercise マスタ取得（training_record 有効テナントのみ）CLAUDE.md 絶対ルール
   const exercisesRaw = isProfessional && trainingEnabled
     ? await prisma.exercise.findMany({
-        where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
+        where:   { tenantId: tenant.id, isActive: true },
         select:  { id: true, name: true, duration: true, intervalMin: true, price: true, category: true },
         orderBy: { sortOrder: "asc" },
       })
     : [];
   const exercises: ExerciseItem[] = exercisesRaw;
-
-  // 曜日別営業時間
-  const rawHours = await prisma.businessHour.findMany({
-    where:  { tenantId: tenant.id },
-    select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
-  });
-  const businessHours: BusinessHourData[] = rawHours;
-
-  // スタッフ一覧（週間ビューの新規予約モーダル + リストビューの編集ダイアログで使用）
-  const staffListRaw = await prisma.staff.findMany({
-    where:   { tenantId: tenant.id, isActive: true },
-    select:  { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
-  const staffList = staffListRaw.map(s => ({ id: s.id, displayName: s.name }));
-
-  // 患者一覧（週間ビューの新規予約モーダルのみ）
-  const patientList = isWeekView
-    ? await prisma.patient.findMany({
-        where:   { tenantId: tenant.id },
-        select:  { id: true, displayName: true, nameKana: true },
-        orderBy: { displayName: "asc" },
-      })
-    : [];
-
-  // ── 承認待ちカウント（ビュー共通で使用）────────────────────────
-  const pendingCount = await prisma.appointment.count({
-    where: { tenantId: tenant.id, status: "pending" },
-  });
 
   // ── 週間ビュー用データ ────────────────────────────────────────
   let weekStartStr = "";

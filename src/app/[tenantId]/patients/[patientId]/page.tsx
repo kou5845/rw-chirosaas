@@ -64,33 +64,31 @@ export default async function PatientDetailPage({ params }: Props) {
   });
   if (!tenant) notFound();
 
-  // ── 患者取得（CLAUDE.md 絶対ルール: tenantId でクロステナント防止）──
-  const patient = await prisma.patient.findFirst({
-    where: {
-      id:       patientId,
-      tenantId: tenant.id, // ← 他テナントへのアクセスをここで遮断する
-    },
-    select: {
-      id:              true,
-      displayName:     true,
-      nameKana:        true,
-      phone:           true,
-      email:           true,
-      birthDate:       true,
-      lineUserId:      true,
-      accessToken:     true, // マイページ共有用
-      accessPin:       true, // マイページログインPIN
-      emergencyContact: true,
-      memo:            true,
-      isActive:        true,
-      createdAt:       true,
-      heightCm:        true,
-    },
-  });
-  if (!patient) notFound();
-
-  // ── フィーチャートグル取得 ──────────────────────────────────────
-  const [karteFeature, trainingFeature] = await Promise.all([
+  // ── バッチ1: 患者情報とフィーチャートグルを並列取得（両者は tenantId のみ依存、互いに独立）──
+  const [patient, karteFeature, trainingFeature] = await Promise.all([
+    // CLAUDE.md 絶対ルール: tenantId でクロステナント防止
+    prisma.patient.findFirst({
+      where: {
+        id:       patientId,
+        tenantId: tenant.id, // ← 他テナントへのアクセスをここで遮断する
+      },
+      select: {
+        id:              true,
+        displayName:     true,
+        nameKana:        true,
+        phone:           true,
+        email:           true,
+        birthDate:       true,
+        lineUserId:      true,
+        accessToken:     true, // マイページ共有用
+        accessPin:       true, // マイページログインPIN
+        emergencyContact: true,
+        memo:            true,
+        isActive:        true,
+        createdAt:       true,
+        heightCm:        true,
+      },
+    }),
     prisma.tenantSetting.findUnique({
       where: { tenantId_featureKey: { tenantId: tenant.id, featureKey: "karte_mode" } },
       select: { featureValue: true },
@@ -100,56 +98,112 @@ export default async function PatientDetailPage({ params }: Props) {
       select: { featureValue: true },
     }),
   ]);
+  if (!patient) notFound();
+
   const isProfessional   = karteFeature?.featureValue === "professional";
   const trainingEnabled  = trainingFeature?.featureValue === "true";
 
-  // ── カルテ履歴取得 ─────────────────────────────────────────────
-  const kartes = await prisma.karte.findMany({
-    where: {
-      tenantId:  tenant.id, // CLAUDE.md 絶対ルール
-      patientId: patient.id,
-    },
-    select: {
-      id:                true,
-      karteType:         true,
-      karteModeSnapshot: true,
-      conditionNote:     true,
-      progressNote:      true,
-      conditionStatus:   true,
-      bodyParts:         true,
-      treatments:        true,
-      createdAt:         true,
-      staff:             { select: { name: true } },
-      weight:      true,
-      bodyFat:     true,
-      bmi:         true,
-      muscleMass:  true,
-      bmr:         true,
-      visceralFat: true,
-      bodyCompValues: true,
-      exerciseRecords: {
-        select: {
-          id:          true,
-          exerciseId:  true,
-          sets:        true,
-          reps:        true,
-          weightKg:    true,
-          durationSec: true,
-          memo:        true,
-          exercise:    { select: { name: true, category: true } },
+  // ── バッチ2: カルテ・サービス・営業時間・予約・スタッフを並列取得 ──────────
+  // （patient.id と tenant.id の両方が判明した時点で全て独立実行可能）
+  const [
+    kartes,
+    services,
+    businessHours,
+    appointments,
+    appointmentCounts,
+    lastCompletedAppt,
+    staffList,
+  ] = await Promise.all([
+    // カルテ履歴取得 CLAUDE.md 絶対ルール
+    prisma.karte.findMany({
+      where: {
+        tenantId:  tenant.id,
+        patientId: patient.id,
+      },
+      select: {
+        id:                true,
+        karteType:         true,
+        karteModeSnapshot: true,
+        conditionNote:     true,
+        progressNote:      true,
+        conditionStatus:   true,
+        bodyParts:         true,
+        treatments:        true,
+        createdAt:         true,
+        staff:             { select: { name: true } },
+        weight:      true,
+        bodyFat:     true,
+        bmi:         true,
+        muscleMass:  true,
+        bmr:         true,
+        visceralFat: true,
+        bodyCompValues: true,
+        exerciseRecords: {
+          select: {
+            id:          true,
+            exerciseId:  true,
+            sets:        true,
+            reps:        true,
+            weightKg:    true,
+            durationSec: true,
+            memo:        true,
+            exercise:    { select: { name: true, category: true } },
+          },
+          orderBy: { createdAt: "asc" },
         },
-        orderBy: { createdAt: "asc" },
+        media: {
+          select: { id: true, mediaType: true, storagePath: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
-      media: {
-        select: { id: true, mediaType: true, storagePath: true },
-        orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
+    }),
+    // Service マスタ（施術内容選択用: Simple/Professional 共通）CLAUDE.md 絶対ルール
+    prisma.service.findMany({
+      where:   { tenantId: tenant.id, isActive: true },
+      select:  { id: true, name: true, duration: true, intervalMin: true, price: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
+    // 曜日別営業時間
+    prisma.businessHour.findMany({
+      where:  { tenantId: tenant.id },
+      select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
+    }),
+    // 全予約（新しい順）
+    prisma.appointment.findMany({
+      where:   { tenantId: tenant.id, patientId: patient.id },
+      orderBy: { startAt: "desc" },
+      select: {
+        id:          true,
+        status:      true,
+        startAt:     true,
+        menuName:    true,
+        durationMin: true,
+        price:       true,
+        staff:       { select: { name: true } },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+    }),
+    // ステータス別集計
+    prisma.appointment.groupBy({
+      by:     ["status"],
+      where:  { tenantId: tenant.id, patientId: patient.id },
+      _count: { id: true },
+    }),
+    // 最終来院日
+    prisma.appointment.findFirst({
+      where:   { tenantId: tenant.id, patientId: patient.id, status: "completed" },
+      orderBy: { startAt: "desc" },
+      select:  { startAt: true },
+    }),
+    // ダイアログ用スタッフ一覧
+    prisma.staff.findMany({
+      where:   { tenantId: tenant.id, isActive: true },
+      select:  { id: true, name: true },
+      orderBy: { name: "asc" },
+    }).then(staffs => staffs.map(s => ({ id: s.id, displayName: s.name }))),
+  ]);
 
   // メディアは /api/media/[mediaId] Route Handler 経由でオンデマンドに署名付きURLを取得する
-  // （ページロード時の一括生成は廃止: URL期限切れ・生成失敗の問題を根本解決）
   const kartesWithUrls = kartes;
 
   // ── 体組成グラフ用データ集計（training_record が有効な場合のみ）──
@@ -190,66 +244,19 @@ export default async function PatientDetailPage({ params }: Props) {
 
   const metricsConfig = parseMetricsConfig(tenant.trainingMetricsConfig);
 
-  // ── Service マスタ取得（施術内容選択用: Simple/Professional 共通）──
-  const services = await prisma.service.findMany({
-    where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
-    select:  { id: true, name: true, duration: true, intervalMin: true, price: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  });
-
-  // ── 種目マスタ取得（編集ダイアログ用: Professional + training_record 有効時のみ）──
+  // ── バッチ3: Exercise マスタ（isProfessional && trainingEnabled の結果に依存）──
+  // 種目マスタ取得（編集ダイアログ用: Professional + training_record 有効時のみ）CLAUDE.md 絶対ルール
   const exercises =
     isProfessional && trainingEnabled
       ? await prisma.exercise.findMany({
-          where:   { tenantId: tenant.id, isActive: true }, // CLAUDE.md 絶対ルール
+          where:   { tenantId: tenant.id, isActive: true },
           select:  { id: true, name: true, duration: true, intervalMin: true, price: true, category: true, unit: true },
           orderBy: [{ sortOrder: "asc" }, { category: "asc" }, { name: "asc" }],
         })
       : [];
 
-  // ── 曜日別営業時間 ────────────────────────────────────────────
-  const businessHours = await prisma.businessHour.findMany({
-    where:  { tenantId: tenant.id },
-    select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
-  });
-
-  // ── 予約一覧 + 集計 + スタッフ一覧 ──────────────────────────────
-  const [appointments, appointmentCounts, lastCompletedAppt, staffList] = await Promise.all([
-    // 全予約（新しい順）
-    prisma.appointment.findMany({
-      where:   { tenantId: tenant.id, patientId: patient.id },
-      orderBy: { startAt: "desc" },
-      select: {
-        id:          true,
-        status:      true,
-        startAt:     true,
-        menuName:    true,
-        durationMin: true,
-        price:       true,
-        staff:       { select: { name: true } },
-      },
-    }),
-    // ステータス別集計
-    prisma.appointment.groupBy({
-      by:     ["status"],
-      where:  { tenantId: tenant.id, patientId: patient.id },
-      _count: { id: true },
-    }),
-    // 最終来院日
-    prisma.appointment.findFirst({
-      where:   { tenantId: tenant.id, patientId: patient.id, status: "completed" },
-      orderBy: { startAt: "desc" },
-      select:  { startAt: true },
-    }),
-    // ダイアログ用スタッフ一覧
-    prisma.staff.findMany({
-      where:   { tenantId: tenant.id, isActive: true },
-      select:  { id: true, name: true },
-      orderBy: { name: "asc" },
-    }).then(staffs => staffs.map(s => ({ id: s.id, displayName: s.name }))),
-  ]);
-
   const totalAppts = appointmentCounts.reduce((s, r) => s + r._count.id, 0);
+
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">

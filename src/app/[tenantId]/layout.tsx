@@ -41,25 +41,26 @@ export default async function DashboardLayout({ children, params }: Props) {
     redirect("/login?error=disabled");
   }
 
-  // フィーチャートグル: training_record の値を取得
-  const trainingFeature = await prisma.tenantSetting.findUnique({
-    where: {
-      tenantId_featureKey: {
-        tenantId:   tenant.id,
-        featureKey: "training_record",
+  // フィーチャートグルと承認待ち件数を並列取得（直列→並列化でレイテンシ削減）
+  const [trainingFeature, pendingCount] = await Promise.all([
+    prisma.tenantSetting.findUnique({
+      where: {
+        tenantId_featureKey: {
+          tenantId:   tenant.id,
+          featureKey: "training_record",
+        },
       },
-    },
-    select: { featureValue: true },
-  });
+      select: { featureValue: true },
+    }),
+    // 承認待ち件数（ヘッダーバッジ用）CLAUDE.md 絶対ルール: tenant_id フィルタ必須
+    prisma.appointment.count({
+      where: {
+        tenantId: tenant.id,
+        status: "pending",
+      },
+    }),
+  ]);
   const trainingEnabled = trainingFeature?.featureValue === "true";
-
-  // 承認待ち件数（ヘッダーバッジ用）
-  const pendingCount = await prisma.appointment.count({
-    where: {
-      tenantId: tenant.id, // CLAUDE.md 絶対ルール: tenant_id フィルタ必須
-      status: "pending",
-    },
-  });
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F9FAFB]">
