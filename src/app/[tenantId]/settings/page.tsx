@@ -215,6 +215,7 @@ export default async function SettingsPage({ params }: Props) {
           <div className="mt-4">
             <EmailCustomMessageForm
               tenantSlug={slug}
+              tenantName={tenant.name}
               isPro={tenant.plan === "pro"}
               initialMessage={tenant.emailCustomMessage}
             />
