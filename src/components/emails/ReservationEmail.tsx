@@ -51,7 +51,9 @@ export type ReservationEmailProps = {
   oldStartAt?:   Date | null;
   oldEndAt?:     Date | null;
   /** 患者専用マイページURL（confirmation / reminder 時にメール末尾に表示） */
-  mypageUrl?:    string | null;
+  mypageUrl?:       string | null;
+  /** プロプラン限定: 医院が設定するカスタムメッセージ（cancel / rejection / update 以外で表示） */
+  customMessage?:   string | null;
 };
 
 export function ReservationEmail({
@@ -69,6 +71,7 @@ export function ReservationEmail({
   oldStartAt,
   oldEndAt,
   mypageUrl,
+  customMessage,
 }: ReservationEmailProps) {
   const isConfirmation = type === "confirmation";
   const isReminder     = type === "reminder";
@@ -337,6 +340,33 @@ export function ReservationEmail({
                                   </td>
                                 </tr>
                               )}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* ── 医院カスタムメッセージ（プロプラン・cancel/rejection 以外）── */}
+                    {customMessage && !isCancel && !isRejection && (
+                      <tr>
+                        <td style={{ padding: "0 32px 24px" }}>
+                          <table width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: "#FFFDF5", borderRadius: 10, border: "1px solid #FDE68A", overflow: "hidden" }}>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: "16px 20px" }}>
+                                  <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: "bold", color: "#92400E", textTransform: "uppercase", letterSpacing: 1 }}>
+                                    ✉ {tenantName} からのご案内
+                                  </p>
+                                  <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.8 }}>
+                                    {customMessage.split("\n").map((line, i, arr) => (
+                                      <span key={i}>
+                                        {line}
+                                        {i < arr.length - 1 && <br />}
+                                      </span>
+                                    ))}
+                                  </p>
+                                </td>
+                              </tr>
                             </tbody>
                           </table>
                         </td>

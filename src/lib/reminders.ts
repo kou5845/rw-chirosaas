@@ -74,6 +74,7 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
           lineEnabled:            true,
           lineChannelAccessToken: true,   // テナント固有のLINEトークン
           emailEnabled:           true,
+          emailCustomMessage:     true,
         },
       },
       patient: {
@@ -175,17 +176,18 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
     if (tenant.emailEnabled && patient.email) {
       try {
         await sendReminderEmail({
-          to:          patient.email,
-          tenantName:  tenant.name,
-          patientName: patient.displayName,
-          menuName:    appt.menuName,
-          durationMin: appt.durationMin,
-          price:       appt.price,
-          startAt:     appt.startAt,
-          endAt:       appt.endAt,
-          phone:       tenant.phone,
-          address:     tenant.address,
+          to:            patient.email,
+          tenantName:    tenant.name,
+          patientName:   patient.displayName,
+          menuName:      appt.menuName,
+          durationMin:   appt.durationMin,
+          price:         appt.price,
+          startAt:       appt.startAt,
+          endAt:         appt.endAt,
+          phone:         tenant.phone,
+          address:       tenant.address,
           mypageUrl,
+          customMessage: tenant.emailCustomMessage,
         });
         emailSent = true;
         console.log(

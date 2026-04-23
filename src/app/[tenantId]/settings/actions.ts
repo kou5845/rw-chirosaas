@@ -182,6 +182,53 @@ export async function updateLineSettings(
   return { success: true };
 }
 
+// ── メールカスタムメッセージ更新（プロプラン限定）────────────────────────
+
+export type EmailCustomMessageState = {
+  success?: boolean;
+  errors?: { general?: string; message?: string };
+} | null;
+
+export async function updateEmailCustomMessage(
+  _prev: EmailCustomMessageState,
+  formData: FormData
+): Promise<EmailCustomMessageState> {
+  const tenantSlug = formData.get("tenantSlug") as string;
+  if (!tenantSlug) return { errors: { general: "テナント情報が不正です。" } };
+
+  // CLAUDE.md 絶対ルール: DB照合でtenantIdを確定
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: tenantSlug },
+    select: { id: true, plan: true },
+  });
+  if (!tenant) return { errors: { general: "テナントが見つかりません。" } };
+
+  // バックエンドでのプランガード（フロントエンドのみ制御に依存しない）
+  if (tenant.plan !== "pro") {
+    return { errors: { general: "この機能はプロプラン限定です。" } };
+  }
+
+  const raw = (formData.get("emailCustomMessage") as string | null) ?? "";
+  const message = raw.trim() || null;
+
+  if (message && message.length > 500) {
+    return { errors: { message: "500文字以内で入力してください。" } };
+  }
+
+  try {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data:  { emailCustomMessage: message },
+    });
+  } catch (err) {
+    console.error("[updateEmailCustomMessage] DB error:", err);
+    return { errors: { general: "保存中にエラーが発生しました。" } };
+  }
+
+  revalidatePath(`/${tenantSlug}/settings`);
+  return { success: true };
+}
+
 // ── 通知設定更新 ──────────────────────────────────────────────────────
 
 export type NotificationSettingsState = {

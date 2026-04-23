@@ -21,6 +21,7 @@ type TenantInfo = {
   lineEnabled:            boolean;
   lineChannelAccessToken: string | null;
   emailEnabled:           boolean;
+  emailCustomMessage?:    string | null;
 };
 
 type PatientInfo = {
@@ -101,18 +102,19 @@ export async function sendUpdateNotification({
   if (tenant.emailEnabled && patient.email) {
     try {
       await sendUpdateEmail({
-        to:          patient.email,
-        tenantName:  tenant.name,
-        patientName: patient.displayName,
-        menuName:    appointment.menuName,
-        durationMin: appointment.durationMin,
-        price:       appointment.price,
-        startAt:     appointment.startAt,
-        endAt:       appointment.endAt,
-        phone:       tenant.phone,
-        address:     tenant.address,
+        to:            patient.email,
+        tenantName:    tenant.name,
+        patientName:   patient.displayName,
+        menuName:      appointment.menuName,
+        durationMin:   appointment.durationMin,
+        price:         appointment.price,
+        startAt:       appointment.startAt,
+        endAt:         appointment.endAt,
+        phone:         tenant.phone,
+        address:       tenant.address,
         oldStartAt,
         oldEndAt,
+        customMessage: tenant.emailCustomMessage,
       });
       console.log("[notificationService] メール変更通知送信");
     } catch (e) {
@@ -171,16 +173,17 @@ export async function sendCancellationNotification({
   if (tenant.emailEnabled && patient.email) {
     try {
       await sendCancellationEmail({
-        to:          patient.email,
-        tenantName:  tenant.name,
-        patientName: patient.displayName,
-        menuName:    appointment.menuName,
-        durationMin: appointment.durationMin,
-        price:       appointment.price,
-        startAt:     appointment.startAt,
-        endAt:       appointment.endAt,
-        phone:       tenant.phone,
-        address:     tenant.address,
+        to:            patient.email,
+        tenantName:    tenant.name,
+        patientName:   patient.displayName,
+        menuName:      appointment.menuName,
+        durationMin:   appointment.durationMin,
+        price:         appointment.price,
+        startAt:       appointment.startAt,
+        endAt:         appointment.endAt,
+        phone:         tenant.phone,
+        address:       tenant.address,
+        customMessage: tenant.emailCustomMessage,
       });
       console.log("[notificationService] メールキャンセル通知送信");
     } catch (e) {

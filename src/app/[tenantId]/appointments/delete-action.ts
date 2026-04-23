@@ -49,7 +49,7 @@ export async function deleteAppointment(
   // テナント通知設定を取得（削除前に通知するため先に取得）
   const tenantInfo = await prisma.tenant.findUnique({
     where:  { id: tenant.id },
-    select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true },
+    select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailCustomMessage: true },
   });
 
   try {

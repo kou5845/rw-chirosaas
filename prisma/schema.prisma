@@ -101,6 +101,7 @@ model Tenant {
   lineFriendUrl          String?    @map("line_friend_url")
   lineEnabled            Boolean    @default(true)  @map("line_enabled")
   emailEnabled           Boolean    @default(false) @map("email_enabled")
+  emailCustomMessage     String?    @map("email_custom_message")
   isActive           Boolean    @default(true) @map("is_active")
   businessStartTime  String     @default("09:00") @map("business_start_time") @db.VarChar(5)
   businessEndTime    String     @default("20:00") @map("business_end_time")   @db.VarChar(5)

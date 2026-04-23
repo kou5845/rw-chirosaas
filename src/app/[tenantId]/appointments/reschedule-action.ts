@@ -94,7 +94,7 @@ export async function rescheduleAppointment({
   // 変更通知を非同期送信（失敗してもリスケジュール自体は成功扱い）
   const tenantInfo = await prisma.tenant.findUnique({
     where:  { id: tenant.id },
-    select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true },
+    select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailCustomMessage: true },
   });
   if (tenantInfo) {
     sendUpdateNotification({
