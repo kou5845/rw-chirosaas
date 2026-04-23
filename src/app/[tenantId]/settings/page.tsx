@@ -23,6 +23,7 @@ import { ReservationLinkCard } from "./ReservationLinkCard";
 import { TrainingMetricsForm } from "./TrainingMetricsForm";
 import { parseMetricsConfig } from "@/lib/training-metrics";
 import { StaffManagementForm } from "./StaffManagementForm";
+import { EmailCustomMessageForm } from "./EmailCustomMessageForm";
 import { SettingsTabsClient, type TabId } from "./SettingsTabsClient";
 import type { ReactNode } from "react";
 
@@ -53,6 +54,8 @@ export default async function SettingsPage({ params }: Props) {
       phone:                  true,
       address:                true,
       trainingMetricsConfig:  true,
+      plan:                   true,
+      emailCustomMessage:     true,
     },
   });
   if (!tenant) notFound();
@@ -198,6 +201,22 @@ export default async function SettingsPage({ params }: Props) {
               tenantSlug={slug}
               lineEnabled={tenant.lineEnabled}
               emailEnabled={tenant.emailEnabled}
+            />
+          </div>
+        </section>
+
+        <div className="border-t border-gray-100" />
+
+        <section>
+          <SectionHeader
+            title="メールカスタムメッセージ"
+            description="予約受付・確定・リマインダーメールに添付する独自メッセージです（プロプラン限定）"
+          />
+          <div className="mt-4">
+            <EmailCustomMessageForm
+              tenantSlug={slug}
+              isPro={tenant.plan === "pro"}
+              initialMessage={tenant.emailCustomMessage}
             />
           </div>
         </section>
