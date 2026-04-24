@@ -62,6 +62,8 @@ export default async function SettingsPage({ params }: Props) {
       lineConfirmMsg:         true,
       lineChangeMsg:          true,
       lineReminderMsg:        true,
+      emailReceiveMsg:        true,
+      lineReceiveMsg:         true,
       emailRejectMsg:         true,
       lineRejectMsg:          true,
     },
@@ -228,6 +230,8 @@ export default async function SettingsPage({ params }: Props) {
               emailConfirmMsg={tenant.emailConfirmMsg}
               emailChangeMsg={tenant.emailChangeMsg}
               emailReminderMsg={tenant.emailReminderMsg}
+              emailReceiveMsg={tenant.emailReceiveMsg}
+              lineReceiveMsg={tenant.lineReceiveMsg}
               lineConfirmMsg={tenant.lineConfirmMsg}
               lineChangeMsg={tenant.lineChangeMsg}
               lineReminderMsg={tenant.lineReminderMsg}

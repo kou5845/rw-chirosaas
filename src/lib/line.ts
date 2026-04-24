@@ -184,7 +184,7 @@ export function buildReminder2hMessage(args: NotificationTemplateArgs): string {
  * 予約受付通知のメッセージ文字列を生成する（pending 作成直後に送信）。
  */
 export function buildReceptionMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address } = args;
+  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address, customMessage } = args;
   const lines = [
     "【ご予約受付のお知らせ】",
     `${tenantName} にてご予約を受け付けました。`,
@@ -202,6 +202,9 @@ export function buildReceptionMessage(args: NotificationTemplateArgs): string {
   }
   if (phone) {
     lines.push("", `変更・キャンセルはお電話にて承ります：${phone}`);
+  }
+  if (customMessage?.trim()) {
+    lines.push("", "─────────────────", customMessage.trim());
   }
   return lines.join("\n");
 }
