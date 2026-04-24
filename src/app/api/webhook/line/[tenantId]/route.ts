@@ -299,13 +299,13 @@ async function handleTextMessage(
   // マイページログイン情報（birthDate・accessPin がある患者のみ）
   if (matched.birthDate || matched.accessPin) {
     successLines.push("", "─────────────────", "📋 マイページログイン情報");
+    successLines.push(`🔗 マイページログインURL`, mypageUrl);
     if (matched.birthDate) {
       successLines.push(`🗓 ログインID: ${fmtBirthDate(matched.birthDate)}`);
     }
     if (matched.accessPin) {
       successLines.push(`🔑 暗証番号: ${matched.accessPin}`);
     }
-    successLines.push(`🔗 ${mypageUrl}`);
   }
 
   // 院の連絡先
