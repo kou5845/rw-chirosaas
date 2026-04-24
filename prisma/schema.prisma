@@ -101,7 +101,14 @@ model Tenant {
   lineFriendUrl          String?    @map("line_friend_url")
   lineEnabled            Boolean    @default(true)  @map("line_enabled")
   emailEnabled           Boolean    @default(false) @map("email_enabled")
-  emailCustomMessage     String?    @map("email_custom_message")
+  emailCustomMessage     String?    @map("email_custom_message") // 旧フィールド（移行済み後は未使用）
+  /// 通知種別ごとのカスタムメッセージ（プロプラン限定）
+  emailConfirmMsg   String?  @map("email_confirm_msg")   // メール×予約確定
+  emailChangeMsg    String?  @map("email_change_msg")    // メール×予約変更
+  emailReminderMsg  String?  @map("email_reminder_msg")  // メール×リマインド
+  lineConfirmMsg    String?  @map("line_confirm_msg")    // LINE×予約確定
+  lineChangeMsg     String?  @map("line_change_msg")     // LINE×予約変更
+  lineReminderMsg   String?  @map("line_reminder_msg")   // LINE×リマインド
   isActive           Boolean    @default(true) @map("is_active")
   businessStartTime  String     @default("09:00") @map("business_start_time") @db.VarChar(5)
   businessEndTime    String     @default("20:00") @map("business_end_time")   @db.VarChar(5)

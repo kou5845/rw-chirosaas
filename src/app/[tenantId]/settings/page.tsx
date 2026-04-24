@@ -56,6 +56,12 @@ export default async function SettingsPage({ params }: Props) {
       trainingMetricsConfig:  true,
       plan:                   true,
       emailCustomMessage:     true,
+      emailConfirmMsg:        true,
+      emailChangeMsg:         true,
+      emailReminderMsg:       true,
+      lineConfirmMsg:         true,
+      lineChangeMsg:          true,
+      lineReminderMsg:        true,
     },
   });
   if (!tenant) notFound();
@@ -209,15 +215,20 @@ export default async function SettingsPage({ params }: Props) {
 
         <section>
           <SectionHeader
-            title="メールカスタムメッセージ"
-            description="予約受付・確定・リマインダーメールに添付する独自メッセージです（プロプラン限定）"
+            title="通知カスタムメッセージ"
+            description="予約確定・変更・リマインドのメール/LINEに添付する独自メッセージです（プロプラン限定）"
           />
           <div className="mt-4">
             <EmailCustomMessageForm
               tenantSlug={slug}
               tenantName={tenant.name}
               isPro={tenant.plan === "pro"}
-              initialMessage={tenant.emailCustomMessage}
+              emailConfirmMsg={tenant.emailConfirmMsg}
+              emailChangeMsg={tenant.emailChangeMsg}
+              emailReminderMsg={tenant.emailReminderMsg}
+              lineConfirmMsg={tenant.lineConfirmMsg}
+              lineChangeMsg={tenant.lineChangeMsg}
+              lineReminderMsg={tenant.lineReminderMsg}
             />
           </div>
         </section>

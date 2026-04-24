@@ -69,7 +69,8 @@ export async function createReservation(
       lineChannelAccessToken: true,
       lineEnabled:            true,
       emailEnabled:           true,
-      emailCustomMessage:     true,
+      emailConfirmMsg:        true,
+      lineConfirmMsg:         true,
     },
   });
   if (!tenant) {
@@ -162,6 +163,7 @@ export async function createReservation(
           endAt,
           phone:   tenant.phone,
           address: tenant.address,
+          customMessage: tenant.lineConfirmMsg,
         });
         await client.pushMessage({
           to:       patient.lineUserId,
@@ -197,7 +199,7 @@ export async function createReservation(
         endAt,
         phone:         tenant.phone,
         address:       tenant.address,
-        customMessage: tenant.emailCustomMessage,
+        customMessage: tenant.emailConfirmMsg,
       });
       console.log(`[reservationService] メール受付通知送信: patientId=${patientId}`);
     } catch (e) {
@@ -269,7 +271,7 @@ export async function updateReservationStatus(
 
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
-    select: { name: true, phone: true, address: true, subdomain: true, lineChannelAccessToken: true, lineEnabled: true, emailEnabled: true, emailCustomMessage: true },
+    select: { name: true, phone: true, address: true, subdomain: true, lineChannelAccessToken: true, lineEnabled: true, emailEnabled: true, emailConfirmMsg: true, lineConfirmMsg: true },
   });
   if (!tenant) {
     return { success: false, error: "テナントが見つかりません。" };
@@ -335,9 +337,10 @@ export async function updateReservationStatus(
           price:       appointment.price,
           startAt:     appointment.startAt,
           endAt:       appointment.endAt,
-          phone:   tenant.phone,
-          address: tenant.address,
+          phone:         tenant.phone,
+          address:       tenant.address,
           mypageUrl,
+          customMessage: tenant.lineConfirmMsg,
         });
         await client.pushMessage({
           to:       appointment.patient.lineUserId,
@@ -375,7 +378,7 @@ export async function updateReservationStatus(
         phone:         tenant.phone,
         address:       tenant.address,
         mypageUrl,
-        customMessage: tenant.emailCustomMessage,
+        customMessage: tenant.emailConfirmMsg,
       });
       console.log(`[reservationService] メール確定通知送信: appointmentId=${appointmentId}`);
     } catch (e) {
@@ -432,7 +435,7 @@ export async function rejectReservation(
 
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
-    select: { name: true, phone: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailCustomMessage: true },
+    select: { name: true, phone: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true },
   });
   if (!tenant) {
     return { success: false, error: "テナントが見つかりません。" };

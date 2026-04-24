@@ -183,7 +183,7 @@ export async function bulkApproveAppointments(
   // 通知を非同期送信（失敗しても承認は完了扱い）
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
-    select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailCustomMessage: true },
+    select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailConfirmMsg: true, lineConfirmMsg: true },
   });
   if (tenant) {
     for (const appt of targets) {
@@ -205,7 +205,7 @@ export async function bulkApproveAppointments(
           const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
           client.pushMessage({
             to:       appt.patient.lineUserId,
-            messages: [{ type: "text", text: buildConfirmationMessage(msgArgs) }],
+            messages: [{ type: "text", text: buildConfirmationMessage({ ...msgArgs, customMessage: tenant.lineConfirmMsg }) }],
           }).catch((e: unknown) => console.error("[bulkApprove] LINE通知失敗:", e));
         }
       }
@@ -215,7 +215,7 @@ export async function bulkApproveAppointments(
           to:            appt.patient.email,
           type:          "confirmation",
           ...msgArgs,
-          customMessage: tenant.emailCustomMessage,
+          customMessage: tenant.emailConfirmMsg,
         }).catch((e: unknown) => console.error("[bulkApprove] メール通知失敗:", e));
       }
     }
