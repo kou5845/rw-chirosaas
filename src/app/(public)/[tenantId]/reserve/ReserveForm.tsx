@@ -46,6 +46,7 @@ export type LockedPatient = {
   nameKana:    string | null;
   phone:       string | null;
   email:       string | null;
+  lineUserId:  string | null;
 };
 
 type WarningState = {
@@ -356,8 +357,8 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
           </div>
         )}
 
-        {/* LINE 案内（lineEnabled && lineFriendUrl の両方が設定済みの場合のみ表示） */}
-        {lineEnabled && lineFriendUrl && (
+        {/* LINE 案内（未連携の患者のみ表示） */}
+        {lineEnabled && lineFriendUrl && !lockedPatient?.lineUserId && (
           <div className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4 text-left space-y-3">
             <div className="flex items-center gap-2">
               <MessageCircle size={14} className="text-[#06C755] shrink-0" />

@@ -48,7 +48,7 @@ export default async function ReservePage({ params, searchParams }: Props) {
     if (session && session.tenantId === tenant.id) {
       const patient = await prisma.patient.findFirst({
         where:  { id: session.patientId, tenantId: tenant.id, isActive: true },
-        select: { id: true, displayName: true, nameKana: true, phone: true, email: true },
+        select: { id: true, displayName: true, nameKana: true, phone: true, email: true, lineUserId: true },
       });
       if (patient) lockedPatient = patient;
     }
