@@ -140,8 +140,8 @@ export async function createReservation(
 
   // ── 5. 受付通知（lineEnabled / emailEnabled フラグに従って送信）──
   // 失敗しても予約作成の成功には影響させない
-  const patient = await prisma.patient.findUnique({
-    where:  { id: patientId },
+  const patient = await prisma.patient.findFirst({
+    where:  { id: patientId, tenantId },
     select: { lineUserId: true, displayName: true, email: true },
   });
 
