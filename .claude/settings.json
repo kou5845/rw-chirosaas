@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+
+  "permissions": {
+    "defaultMode": "auto",
+
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(chmod 777 *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(git push *)",
+      "Read(.env)",
+      "Read(.env.local)",
+      "Read(.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*)"
+    ]
+  },
+
+  "sandbox": {
+    "autoAllowBashIfSandboxed": true,
+    "filesystem": {
+      "denyRead": [
+        ".env",
+        ".env.local",
+        ".env.production",
+        ".env.development"
+      ]
+    }
+  }
+}
