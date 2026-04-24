@@ -34,6 +34,25 @@ function normalizePhone(phone: string): string {
   return toHalfWidth(phone).replace(/[\-\s]/g, "");
 }
 
+/** 生年月日 Date を YYYYMMDD 文字列に変換する */
+function fmtBirthDate(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
+}
+
+type TenantInfo = {
+  id:                     string;
+  name:                   string;
+  subdomain:              string | null;
+  isActive:               boolean;
+  lineChannelSecret:      string | null;
+  lineChannelAccessToken: string | null;
+  phone:                  string | null;
+  address:                string | null;
+};
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> },
@@ -46,9 +65,12 @@ export async function POST(
     select: {
       id:                     true,
       name:                   true,
+      subdomain:              true,
       isActive:               true,
       lineChannelSecret:      true,
       lineChannelAccessToken: true,
+      phone:                  true,
+      address:                true,
     },
   });
 
@@ -88,7 +110,7 @@ export async function POST(
 
   // イベントを並列処理（返信トークンは5分以内に使い切る必要があるため）
   const results = await Promise.allSettled(
-    body.events.map((event) => handleEvent(event, tenantId, tenant.name, client)),
+    body.events.map((event) => handleEvent(event, tenant, client)),
   );
   results.forEach((r, i) => {
     if (r.status === "rejected") {
@@ -103,15 +125,14 @@ export async function POST(
 
 async function handleEvent(
   event: webhook.Event,
-  tenantId: string,
-  tenantName: string,
+  tenant: TenantInfo,
   client: messagingApi.MessagingApiClient,
 ): Promise<void> {
   switch (event.type) {
     case "follow":
       await handleFollow(
         (event as webhook.FollowEvent).replyToken,
-        tenantName,
+        tenant,
         client,
       );
       break;
@@ -124,7 +145,7 @@ async function handleEvent(
           msgEvent.replyToken,
           msgEvent.source?.userId ?? "",
           textMsg.text,
-          tenantId,
+          tenant,
           client,
         );
       }
@@ -137,30 +158,35 @@ async function handleEvent(
   }
 }
 
-/** 友だち追加イベント: 連携方法を案内する */
+/** 友だち追加イベント: 連携方法と院の連絡先を案内する */
 async function handleFollow(
   replyToken: string,
-  tenantName: string,
+  tenant: TenantInfo,
   client: messagingApi.MessagingApiClient,
 ): Promise<void> {
+  const lines = [
+    `${tenant.name} の公式LINEアカウントへようこそ！`,
+    "",
+    "📱 ご予約の通知を受け取るには、",
+    "こちらのトーク画面に「電話番号」を送信してください。",
+    "",
+    "例: 090-1234-5678",
+    "",
+    "ご予約時のお電話番号と一致した場合、",
+    "自動的に連携が完了します。",
+  ];
+
+  if (tenant.phone) {
+    lines.push("", "─────────────────", `📞 ${tenant.phone}`);
+  }
+  if (tenant.address) {
+    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.address)}`;
+    lines.push(...(tenant.phone ? [] : ["", "─────────────────"]), `📍 ${tenant.address}`, `🗺 ${mapUrl}`);
+  }
+
   await client.replyMessage({
     replyToken,
-    messages: [
-      {
-        type: "text",
-        text: [
-          `${tenantName} の公式LINEアカウントへようこそ！`,
-          "",
-          "📱 カルテ・ご予約の通知を受け取るには、",
-          "こちらのトーク画面に「電話番号」を送信してください。",
-          "",
-          "例: 090-1234-5678",
-          "",
-          "診察券登録時のお電話番号と一致した場合、",
-          "自動的に連携が完了します。",
-        ].join("\n"),
-      },
-    ],
+    messages: [{ type: "text", text: lines.join("\n") }],
   });
 }
 
@@ -169,7 +195,7 @@ async function handleTextMessage(
   replyToken: string,
   lineUserId: string,
   text: string,
-  tenantId: string,
+  tenant: TenantInfo,
   client: messagingApi.MessagingApiClient,
 ): Promise<void> {
   if (!lineUserId) return;
@@ -182,7 +208,7 @@ async function handleTextMessage(
       messages: [
         {
           type: "text",
-          text: "電話番号をお送りください（例: 090-1234-5678）。\n診察券登録時のお電話番号と照合して連携します。",
+          text: "電話番号をお送りください（例: 090-1234-5678）。\nご予約時のお電話番号と照合して連携します。",
         },
       ],
     });
@@ -193,7 +219,7 @@ async function handleTextMessage(
 
   // ── 既に同じ lineUserId でこのテナントに紐付け済みか確認 ──
   const alreadyLinked = await prisma.patient.findFirst({
-    where: { tenantId, lineUserId },
+    where: { tenantId: tenant.id, lineUserId },
     select: { displayName: true },
   });
   if (alreadyLinked) {
@@ -210,14 +236,13 @@ async function handleTextMessage(
   }
 
   // ── 電話番号で患者を検索 ──
-  // DB に保存されている phone は "090-1234-5678" 形式なので正規化して比較する
   const patients = await prisma.patient.findMany({
     where: {
-      tenantId,
+      tenantId:   tenant.id,
       isActive:   true,
-      lineUserId: null, // 未連携の患者のみ
+      lineUserId: null,
     },
-    select: { id: true, phone: true, displayName: true },
+    select: { id: true, phone: true, displayName: true, birthDate: true, accessPin: true, accessToken: true },
   });
 
   const matched = patients.find(
@@ -225,20 +250,19 @@ async function handleTextMessage(
   );
 
   if (!matched) {
+    const notFoundLines = [
+      "入力いただいた電話番号と一致する患者情報が見つかりませんでした。",
+      "",
+      "・番号の入力間違いがないかご確認ください",
+      "・ご予約時のお電話番号と同じ番号をお送りください",
+      "・ご不明な場合は院までお問い合わせください",
+    ];
+    if (tenant.phone) {
+      notFoundLines.push("", `📞 ${tenant.phone}`);
+    }
     await client.replyMessage({
       replyToken,
-      messages: [
-        {
-          type: "text",
-          text: [
-            "入力いただいた電話番号と一致する患者情報が見つかりませんでした。",
-            "",
-            "・番号の入力間違いがないかご確認ください",
-            "・診察券登録時のお電話番号と同じ番号をお送りください",
-            "・ご不明な場合は院までお問い合わせください",
-          ].join("\n"),
-        },
-      ],
+      messages: [{ type: "text", text: notFoundLines.join("\n") }],
     });
     return;
   }
@@ -250,23 +274,48 @@ async function handleTextMessage(
   });
 
   console.log(
-    `[webhook/line] 紐付け成功: tenantId=${tenantId}, patientId=${matched.id}, lineUserId=${lineUserId}`,
+    `[webhook/line] 紐付け成功: tenantId=${tenant.id}, patientId=${matched.id}, lineUserId=${lineUserId}`,
   );
+
+  // ── 成功メッセージ（ログイン情報・院情報を添付）──
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.VERCEL_URL ?? "localhost:3000"}`;
+  const mypageUrl = `${appUrl}/${tenant.subdomain}/mypage/login`;
+
+  const successLines = [
+    "✅ 連携が完了しました！",
+    "",
+    `${matched.displayName} 様のアカウントと紐付けられました。`,
+    "これからご予約の確定やリマインダーをこちらのトークでお届けします。",
+  ];
+
+  // マイページログイン情報（birthDate・accessPin がある患者のみ）
+  if (matched.birthDate || matched.accessPin) {
+    successLines.push("", "─────────────────", "📋 マイページログイン情報");
+    if (matched.birthDate) {
+      successLines.push(`🗓 ログインID: ${fmtBirthDate(matched.birthDate)}`);
+    }
+    if (matched.accessPin) {
+      successLines.push(`🔑 暗証番号: ${matched.accessPin}`);
+    }
+    successLines.push(`🔗 ${mypageUrl}`);
+  }
+
+  // 院の連絡先
+  if (tenant.phone || tenant.address) {
+    successLines.push("", "─────────────────");
+    if (tenant.phone) {
+      successLines.push(`📞 ${tenant.phone}`);
+    }
+    if (tenant.address) {
+      const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.address)}`;
+      successLines.push(`📍 ${tenant.address}`, `🗺 ${mapUrl}`);
+    }
+  }
+
+  successLines.push("", "今後ともよろしくお願いいたします。");
 
   await client.replyMessage({
     replyToken,
-    messages: [
-      {
-        type: "text",
-        text: [
-          `✅ 連携が完了しました！`,
-          "",
-          `${matched.displayName} 様のアカウントと紐付けられました。`,
-          "これからご予約の確定やリマインダーをこちらのトークでお届けします。",
-          "",
-          "今後ともよろしくお願いいたします。",
-        ].join("\n"),
-      },
-    ],
+    messages: [{ type: "text", text: successLines.join("\n") }],
   });
 }
