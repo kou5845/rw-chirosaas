@@ -109,6 +109,8 @@ model Tenant {
   lineConfirmMsg    String?  @map("line_confirm_msg")    // LINE×予約確定
   lineChangeMsg     String?  @map("line_change_msg")     // LINE×予約変更
   lineReminderMsg   String?  @map("line_reminder_msg")   // LINE×リマインド
+  emailRejectMsg    String?  @map("email_reject_msg")    // メール×お断り
+  lineRejectMsg     String?  @map("line_reject_msg")     // LINE×お断り
   isActive           Boolean    @default(true) @map("is_active")
   businessStartTime  String     @default("09:00") @map("business_start_time") @db.VarChar(5)
   businessEndTime    String     @default("20:00") @map("business_end_time")   @db.VarChar(5)

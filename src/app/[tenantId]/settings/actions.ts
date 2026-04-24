@@ -237,15 +237,17 @@ export type NotificationCustomMessageState = {
 } | null;
 
 type Platform  = "email" | "line";
-type NotifType = "confirm" | "change" | "reminder";
+type NotifType = "confirm" | "change" | "reminder" | "reject";
 
 const FIELD_MAP: Record<`${Platform}:${NotifType}`, string> = {
   "email:confirm":  "emailConfirmMsg",
   "email:change":   "emailChangeMsg",
   "email:reminder": "emailReminderMsg",
+  "email:reject":   "emailRejectMsg",
   "line:confirm":   "lineConfirmMsg",
   "line:change":    "lineChangeMsg",
   "line:reminder":  "lineReminderMsg",
+  "line:reject":    "lineRejectMsg",
 };
 
 /**

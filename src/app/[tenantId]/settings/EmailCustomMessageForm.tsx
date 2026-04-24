@@ -12,15 +12,17 @@ import {
 
 // ── 型定義 ────────────────────────────────────────────────────────────
 type Platform  = "email" | "line";
-type NotifType = "confirm" | "change" | "reminder";
+type NotifType = "confirm" | "change" | "reminder" | "reject";
 
 export type MessageSet = {
   emailConfirmMsg:  string | null;
   emailChangeMsg:   string | null;
   emailReminderMsg: string | null;
+  emailRejectMsg:   string | null;
   lineConfirmMsg:   string | null;
   lineChangeMsg:    string | null;
   lineReminderMsg:  string | null;
+  lineRejectMsg:    string | null;
 };
 
 type Props = MessageSet & {
@@ -40,6 +42,7 @@ const TYPE_LABELS: Record<NotifType, string> = {
   confirm:  "予約確定",
   change:   "予約変更",
   reminder: "リマインド",
+  reject:   "お断り",
 };
 
 function getFieldKey(platform: Platform, type: NotifType): keyof MessageSet {
@@ -47,9 +50,11 @@ function getFieldKey(platform: Platform, type: NotifType): keyof MessageSet {
     "email:confirm":  "emailConfirmMsg",
     "email:change":   "emailChangeMsg",
     "email:reminder": "emailReminderMsg",
+    "email:reject":   "emailRejectMsg",
     "line:confirm":   "lineConfirmMsg",
     "line:change":    "lineChangeMsg",
     "line:reminder":  "lineReminderMsg",
+    "line:reject":    "lineRejectMsg",
   };
   return map[`${platform}:${type}`];
 }
@@ -64,6 +69,7 @@ const EMAIL_PREVIEW_HEADERS: Record<NotifType, { title: string; sub: string; col
   confirm:  { title: "ご予約が確定しました", sub: "下記の内容でご予約を承りました。", color: "#10B981" },
   change:   { title: "ご予約日時が変更されました", sub: "日時が以下のように変更されました。", color: "#3B82F6" },
   reminder: { title: "明日のご予約リマインダー", sub: "明日のご予約をお知らせします。", color: "#F59E0B" },
+  reject:   { title: "ご予約についてのお知らせ", sub: "誠に恐れ入りますが、下記予約をお断りさせていただきます。", color: "#EF4444" },
 };
 
 function EmailPreview({
@@ -218,6 +224,8 @@ const LINE_BASE_MESSAGES: Record<NotifType, (name: string) => string> = {
     `【ご予約変更のお知らせ】\n${name} のご予約日時が変更されました。\n\n▼ 変更前\n📅 4月30日(水) 10:00〜11:00\n\n▼ 変更後\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）`,
   reminder: (name) =>
     `【明日のご予約リマインダー】\n${name} への明日のご予約をお知らせします。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n\nお忘れなくご来院ください。`,
+  reject: (name) =>
+    `【ご予約についてのお知らせ】\n${name} です。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n\n誠に恐れ入りますが、ご希望の日時はお受けできませんでした。\n別の日程をご検討いただけますと幸いです。`,
 };
 
 function LinePreview({
@@ -229,9 +237,10 @@ function LinePreview({
   notifType:     NotifType;
   customMessage: string;
 }) {
-  const clinic   = tenantName || "〇〇整骨院";
-  const baseText = LINE_BASE_MESSAGES[notifType](clinic);
-  const fullText = customMessage.trim()
+  const clinic    = tenantName || "〇〇整骨院";
+  const baseText  = LINE_BASE_MESSAGES[notifType](clinic);
+  const hasCustom = customMessage.trim().length > 0;
+  const fullText  = hasCustom
     ? `${baseText}\n\n─────────────────\n${customMessage}`
     : baseText;
 
@@ -301,6 +310,21 @@ function LinePreview({
           }}>
             {fullText}
           </div>
+
+          {/* カスタムメッセージ未入力ガイド */}
+          {!hasCustom && (
+            <div style={{
+              marginTop: 8,
+              border: "1.5px dashed rgba(255,255,255,0.6)",
+              borderRadius: 10,
+              padding: "8px 14px",
+              textAlign: "center",
+            }}>
+              <p style={{ margin: 0, fontSize: 9, color: "rgba(255,255,255,0.85)" }}>
+                ↑ ここにカスタムメッセージが追記されます
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -315,9 +339,11 @@ export function EmailCustomMessageForm({
   emailConfirmMsg,
   emailChangeMsg,
   emailReminderMsg,
+  emailRejectMsg,
   lineConfirmMsg,
   lineChangeMsg,
   lineReminderMsg,
+  lineRejectMsg,
 }: Props) {
   const [state, action, isPending] = useActionState<
     NotificationCustomMessageState,
@@ -332,9 +358,11 @@ export function EmailCustomMessageForm({
     emailConfirmMsg:  emailConfirmMsg  ?? "",
     emailChangeMsg:   emailChangeMsg   ?? "",
     emailReminderMsg: emailReminderMsg ?? "",
+    emailRejectMsg:   emailRejectMsg   ?? "",
     lineConfirmMsg:   lineConfirmMsg   ?? "",
     lineChangeMsg:    lineChangeMsg    ?? "",
     lineReminderMsg:  lineReminderMsg  ?? "",
+    lineRejectMsg:    lineRejectMsg    ?? "",
   });
 
   const fieldKey    = getFieldKey(platform, notifType);
@@ -387,7 +415,7 @@ export function EmailCustomMessageForm({
 
         {/* 通知種別タブ */}
         <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-0.5">
-          {(["confirm", "change", "reminder"] as NotifType[]).map((t) => (
+          {(["confirm", "change", "reminder", "reject"] as NotifType[]).map((t) => (
             <button
               key={t}
               type="button"

@@ -435,7 +435,7 @@ export async function rejectReservation(
 
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
-    select: { name: true, phone: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true },
+    select: { name: true, phone: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, lineRejectMsg: true, emailRejectMsg: true },
   });
   if (!tenant) {
     return { success: false, error: "テナントが見つかりません。" };
@@ -482,7 +482,7 @@ export async function rejectReservation(
         const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
         await client.pushMessage({
           to:       appointment.patient.lineUserId,
-          messages: [{ type: "text", text: buildRejectionMessage(notifyArgs) }],
+          messages: [{ type: "text", text: buildRejectionMessage({ ...notifyArgs, customMessage: tenant.lineRejectMsg }) }],
         });
       }
     } catch (e) {
@@ -495,7 +495,8 @@ export async function rejectReservation(
       await sendRejectionEmail({
         to: appointment.patient.email,
         ...notifyArgs,
-        address: null,
+        address:       null,
+        customMessage: tenant.emailRejectMsg,
       });
     } catch (e) {
       console.error("[reservationService] メールお断り送信エラー:", e);

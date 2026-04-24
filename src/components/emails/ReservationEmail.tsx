@@ -346,8 +346,8 @@ export function ReservationEmail({
                       </tr>
                     )}
 
-                    {/* ── 医院カスタムメッセージ（プロプラン・cancel/rejection 以外）── */}
-                    {customMessage && !isCancel && !isRejection && (
+                    {/* ── 医院カスタムメッセージ（プロプラン・cancel 以外）── */}
+                    {customMessage && !isCancel && (
                       <tr>
                         <td style={{ padding: "0 32px 24px" }}>
                           <table width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: "#FFFDF5", borderRadius: 10, border: "1px solid #FDE68A", overflow: "hidden" }}>
