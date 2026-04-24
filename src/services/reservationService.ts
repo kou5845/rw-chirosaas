@@ -69,8 +69,8 @@ export async function createReservation(
       lineChannelAccessToken: true,
       lineEnabled:            true,
       emailEnabled:           true,
-      emailConfirmMsg:        true,
-      lineConfirmMsg:         true,
+      emailReceiveMsg:        true,
+      lineReceiveMsg:         true,
     },
   });
   if (!tenant) {
@@ -163,7 +163,7 @@ export async function createReservation(
           endAt,
           phone:   tenant.phone,
           address: tenant.address,
-          customMessage: tenant.lineConfirmMsg,
+          customMessage: tenant.lineReceiveMsg,
         });
         await client.pushMessage({
           to:       patient.lineUserId,
@@ -199,7 +199,7 @@ export async function createReservation(
         endAt,
         phone:         tenant.phone,
         address:       tenant.address,
-        customMessage: tenant.emailConfirmMsg,
+        customMessage: tenant.emailReceiveMsg,
       });
       console.log(`[reservationService] メール受付通知送信: patientId=${patientId}`);
     } catch (e) {

@@ -109,6 +109,8 @@ model Tenant {
   lineConfirmMsg    String?  @map("line_confirm_msg")    // LINE×予約確定
   lineChangeMsg     String?  @map("line_change_msg")     // LINE×予約変更
   lineReminderMsg   String?  @map("line_reminder_msg")   // LINE×リマインド
+  emailReceiveMsg   String?  @map("email_receive_msg")   // メール×予約受付
+  lineReceiveMsg    String?  @map("line_receive_msg")    // LINE×予約受付
   emailRejectMsg    String?  @map("email_reject_msg")    // メール×お断り
   lineRejectMsg     String?  @map("line_reject_msg")     // LINE×お断り
   isActive           Boolean    @default(true) @map("is_active")

@@ -12,13 +12,15 @@ import {
 
 // ── 型定義 ────────────────────────────────────────────────────────────
 type Platform  = "email" | "line";
-type NotifType = "confirm" | "change" | "reminder" | "reject";
+type NotifType = "receive" | "confirm" | "change" | "reminder" | "reject";
 
 export type MessageSet = {
+  emailReceiveMsg:  string | null;
   emailConfirmMsg:  string | null;
   emailChangeMsg:   string | null;
   emailReminderMsg: string | null;
   emailRejectMsg:   string | null;
+  lineReceiveMsg:   string | null;
   lineConfirmMsg:   string | null;
   lineChangeMsg:    string | null;
   lineReminderMsg:  string | null;
@@ -39,6 +41,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   line:  "LINE",
 };
 const TYPE_LABELS: Record<NotifType, string> = {
+  receive:  "予約受付",
   confirm:  "予約確定",
   change:   "予約変更",
   reminder: "リマインド",
@@ -47,10 +50,12 @@ const TYPE_LABELS: Record<NotifType, string> = {
 
 function getFieldKey(platform: Platform, type: NotifType): keyof MessageSet {
   const map: Record<`${Platform}:${NotifType}`, keyof MessageSet> = {
+    "email:receive":  "emailReceiveMsg",
     "email:confirm":  "emailConfirmMsg",
     "email:change":   "emailChangeMsg",
     "email:reminder": "emailReminderMsg",
     "email:reject":   "emailRejectMsg",
+    "line:receive":   "lineReceiveMsg",
     "line:confirm":   "lineConfirmMsg",
     "line:change":    "lineChangeMsg",
     "line:reminder":  "lineReminderMsg",
@@ -66,6 +71,7 @@ const ACCENT = "#1D7A94";
 const BG     = "#F0FAFB";
 
 const EMAIL_PREVIEW_HEADERS: Record<NotifType, { title: string; sub: string; color: string }> = {
+  receive:  { title: "ご予約を受け付けました", sub: "スタッフ確認後、改めて確定のご連絡をお送りします。", color: "#6366F1" },
   confirm:  { title: "ご予約が確定しました", sub: "下記の内容でご予約を承りました。", color: "#10B981" },
   change:   { title: "ご予約日時が変更されました", sub: "日時が以下のように変更されました。", color: "#3B82F6" },
   reminder: { title: "明日のご予約リマインダー", sub: "明日のご予約をお知らせします。", color: "#F59E0B" },
@@ -218,6 +224,8 @@ function EmailPreview({
 // ── LINEプレビュー ────────────────────────────────────────────────────
 
 const LINE_BASE_MESSAGES: Record<NotifType, (name: string) => string> = {
+  receive: (name) =>
+    `【ご予約受付のお知らせ】\n${name} のご予約を受け付けました。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n💴 ¥5,000\n\nスタッフ確認後、改めてご連絡します。`,
   confirm: (name) =>
     `【ご予約確定のお知らせ】\n${name} のご予約が確定しました。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n💴 ¥5,000\n\nご来院をお待ちしております。`,
   change: (name) =>
@@ -336,10 +344,12 @@ export function EmailCustomMessageForm({
   tenantSlug,
   tenantName,
   isPro,
+  emailReceiveMsg,
   emailConfirmMsg,
   emailChangeMsg,
   emailReminderMsg,
   emailRejectMsg,
+  lineReceiveMsg,
   lineConfirmMsg,
   lineChangeMsg,
   lineReminderMsg,
@@ -355,10 +365,12 @@ export function EmailCustomMessageForm({
 
   // 6種類のメッセージをローカルで管理
   const [messages, setMessages] = useState<MessageSet>({
+    emailReceiveMsg:  emailReceiveMsg  ?? "",
     emailConfirmMsg:  emailConfirmMsg  ?? "",
     emailChangeMsg:   emailChangeMsg   ?? "",
     emailReminderMsg: emailReminderMsg ?? "",
     emailRejectMsg:   emailRejectMsg   ?? "",
+    lineReceiveMsg:   lineReceiveMsg   ?? "",
     lineConfirmMsg:   lineConfirmMsg   ?? "",
     lineChangeMsg:    lineChangeMsg    ?? "",
     lineReminderMsg:  lineReminderMsg  ?? "",
@@ -415,7 +427,7 @@ export function EmailCustomMessageForm({
 
         {/* 通知種別タブ */}
         <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-0.5">
-          {(["confirm", "change", "reminder", "reject"] as NotifType[]).map((t) => (
+          {(["receive", "confirm", "change", "reminder", "reject"] as NotifType[]).map((t) => (
             <button
               key={t}
               type="button"
