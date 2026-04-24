@@ -65,17 +65,53 @@ function getFieldKey(platform: Platform, type: NotifType): keyof MessageSet {
 }
 
 // ── メールプレビュー ───────────────────────────────────────────────────
+// 実際の ReservationEmail.tsx と同一の構成・文言を維持すること
 
 const BRAND  = "#2E9BB8";
 const ACCENT = "#1D7A94";
 const BG     = "#F0FAFB";
 
-const EMAIL_PREVIEW_HEADERS: Record<NotifType, { title: string; sub: string; color: string }> = {
-  receive:  { title: "ご予約を受け付けました", sub: "スタッフ確認後、改めて確定のご連絡をお送りします。", color: "#6366F1" },
-  confirm:  { title: "ご予約が確定しました", sub: "下記の内容でご予約を承りました。", color: "#10B981" },
-  change:   { title: "ご予約日時が変更されました", sub: "日時が以下のように変更されました。", color: "#3B82F6" },
-  reminder: { title: "明日のご予約リマインダー", sub: "明日のご予約をお知らせします。", color: "#F59E0B" },
-  reject:   { title: "ご予約についてのお知らせ", sub: "誠に恐れ入りますが、下記予約をお断りさせていただきます。", color: "#EF4444" },
+type BannerStyle = { bg: string; border: string; titleColor: string };
+
+const BANNER_STYLES: Record<NotifType, BannerStyle> = {
+  receive:  { bg: BG,          border: "#B2E4EF", titleColor: ACCENT     },
+  confirm:  { bg: "#ECFDF5",   border: "#A7F3D0", titleColor: "#065F46"  },
+  change:   { bg: "#EFF6FF",   border: "#BFDBFE", titleColor: "#1D4ED8"  },
+  reminder: { bg: "#FFFBEB",   border: "#FDE68A", titleColor: "#92400E"  },
+  reject:   { bg: "#FEF2F2",   border: "#FECACA", titleColor: "#B91C1C"  },
+};
+
+const HEADLINES: Record<NotifType, string> = {
+  receive:  "ご予約を受け付けました",
+  confirm:  "ご予約が確定しました",
+  change:   "ご予約日時が変更されました",
+  reminder: "明日のご予約リマインダー",
+  reject:   "ご予約をお受けできませんでした",
+};
+
+const SUBTEXTS: Record<NotifType, string> = {
+  receive:  "以下の内容でご予約を受け付けました。スタッフ確認後、確定のご連絡をお送りします。",
+  confirm:  "以下の内容でご予約が確定しました。ご来院をお待ちしております。",
+  change:   "以下のとおり予約日時が変更されました。ご確認ください。",
+  reminder: "明日のご予約のお時間が近づいてまいりました。ご来院をお待ちしております。",
+  reject:   "誠に申し訳ございませんが、以下のご予約をお受けすることができませんでした。",
+};
+
+type FixedMsg = { text: string; bg: string; border: string };
+const FIXED_MESSAGES: Record<NotifType, FixedMsg> = {
+  receive:  { text: "スタッフが内容を確認の上、改めて確定通知をお送りします。\nしばらくお待ちください。", bg: BG, border: "#B2E4EF" },
+  confirm:  { text: "ご予約を確定いたしました。当日は時間に余裕を持ってお越しください。\n変更・キャンセルのご連絡はお早めにお願いいたします。", bg: "#F0FDF4", border: "#BBF7D0" },
+  change:   { text: "ご予約の日時が変更されました。ご不便をおかけして申し訳ございません。\nご不明な点はお電話にてお問い合わせください。", bg: "#EFF6FF", border: "#BFDBFE" },
+  reminder: { text: "明日のご予約をお忘れなくご来院ください。\n変更・キャンセルの場合はお早めにご連絡ください。", bg: "#FFFBEB", border: "#FDE68A" },
+  reject:   { text: "申し訳ございませんが、ご希望の日時は既にご予約が埋まっており、お受けすることができませんでした。\n別の日程をご検討いただけますと幸いです。", bg: "#FEF2F2", border: "#FECACA" },
+};
+
+const TABLE_LABEL: Record<NotifType, string> = {
+  receive:  "予約内容",
+  confirm:  "予約内容",
+  change:   "予約内容",
+  reminder: "予約内容",
+  reject:   "お断りした予約",
 };
 
 function EmailPreview({
@@ -87,8 +123,15 @@ function EmailPreview({
   notifType:     NotifType;
   customMessage: string;
 }) {
-  const hasMsg = customMessage.trim().length > 0;
-  const hdr    = EMAIL_PREVIEW_HEADERS[notifType];
+  const hasMsg  = customMessage.trim().length > 0;
+  const banner  = BANNER_STYLES[notifType];
+  const fixed   = FIXED_MESSAGES[notifType];
+  const isReject = notifType === "reject";
+  const tableBg     = isReject ? "#FEF2F2" : BG;
+  const tableBorder = isReject ? "#FECACA" : "#B2E4EF";
+  const tableInner  = isReject ? "#FECACA" : "#D1EEF5";
+  const tableText   = isReject ? "#7F1D1D" : "#111827";
+  const tableLabel  = isReject ? "#B91C1C" : ACCENT;
 
   return (
     <div style={{
@@ -118,16 +161,16 @@ function EmailPreview({
 
         {/* ステータスバナー */}
         <div style={{
-          backgroundColor: BG,
+          backgroundColor: banner.bg,
           padding: "14px 24px",
           textAlign: "center",
-          borderBottom: `1px solid #B2E4EF`,
+          borderBottom: `1px solid ${banner.border}`,
         }}>
-          <p style={{ margin: 0, fontSize: 15, fontWeight: "bold", color: hdr.color }}>
-            {hdr.title}
+          <p style={{ margin: 0, fontSize: 15, fontWeight: "bold", color: banner.titleColor }}>
+            {HEADLINES[notifType]}
           </p>
           <p style={{ margin: "4px 0 0", fontSize: 11, color: "#6B7280" }}>
-            {hdr.sub}
+            {SUBTEXTS[notifType]}
           </p>
         </div>
 
@@ -138,44 +181,9 @@ function EmailPreview({
           </p>
         </div>
 
-        {/* 予約内容 */}
-        <div style={{ padding: "12px 24px" }}>
-          <div style={{
-            backgroundColor: BG,
-            borderRadius: 10,
-            border: `1px solid #B2E4EF`,
-            overflow: "hidden",
-          }}>
-            <div style={{ padding: "10px 14px 6px", borderBottom: `1px solid #D1EEF5` }}>
-              <p style={{ margin: 0, fontSize: 9, fontWeight: "bold", color: ACCENT, textTransform: "uppercase", letterSpacing: 1 }}>
-                予約内容
-              </p>
-            </div>
-            {[
-              { label: "📅 日付",     value: "5月1日（木）" },
-              { label: "⏰ 時間",     value: "14:00 〜 15:00" },
-              { label: "💆 メニュー", value: "整体コース（60分）" },
-              { label: "💴 料金",     value: "¥5,000" },
-            ].map((row, i, arr) => (
-              <div
-                key={row.label}
-                style={{
-                  padding: "8px 14px",
-                  borderBottom: i < arr.length - 1 ? `1px solid #D1EEF5` : "none",
-                  display: "flex",
-                  gap: 8,
-                }}
-              >
-                <span style={{ width: "40%", fontSize: 10, color: "#6B7280" }}>{row.label}</span>
-                <span style={{ fontSize: 11, fontWeight: "bold", color: "#111827" }}>{row.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* カスタムメッセージ */}
+        {/* カスタムメッセージ（宛名直下） */}
         {hasMsg ? (
-          <div style={{ padding: "0 24px 14px" }}>
+          <div style={{ padding: "12px 24px 0" }}>
             <div style={{
               backgroundColor: "#FFFDF5",
               border: "1px solid #FDE68A",
@@ -191,11 +199,11 @@ function EmailPreview({
             </div>
           </div>
         ) : (
-          <div style={{ padding: "0 24px 14px" }}>
+          <div style={{ padding: "12px 24px 0" }}>
             <div style={{
               border: "1.5px dashed #FDE68A",
               borderRadius: 8,
-              padding: "12px 14px",
+              padding: "10px 14px",
               textAlign: "center",
             }}>
               <p style={{ margin: 0, fontSize: 10, color: "#D1B06B" }}>
@@ -204,6 +212,37 @@ function EmailPreview({
             </div>
           </div>
         )}
+
+        {/* 予約内容テーブル */}
+        <div style={{ padding: "12px 24px 0" }}>
+          <div style={{ backgroundColor: tableBg, borderRadius: 10, border: `1px solid ${tableBorder}`, overflow: "hidden" }}>
+            <div style={{ padding: "10px 14px 6px", borderBottom: `1px solid ${tableInner}` }}>
+              <p style={{ margin: 0, fontSize: 9, fontWeight: "bold", color: tableLabel, textTransform: "uppercase", letterSpacing: 1 }}>
+                {TABLE_LABEL[notifType]}
+              </p>
+            </div>
+            {[
+              { label: "📅 日付",     value: "5月1日（木）" },
+              { label: "⏰ 時間",     value: "14:00 〜 15:00" },
+              { label: "💆 メニュー", value: "整体コース（60分）" },
+              { label: "💴 料金",     value: "¥5,000" },
+            ].map((row, i, arr) => (
+              <div key={row.label} style={{ padding: "8px 14px", borderBottom: i < arr.length - 1 ? `1px solid ${tableInner}` : "none", display: "flex", gap: 8 }}>
+                <span style={{ width: "40%", fontSize: 10, color: "#6B7280" }}>{row.label}</span>
+                <span style={{ fontSize: 11, fontWeight: "bold", color: tableText }}>{row.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 固定メッセージ（実際のメールに存在するテキストボックス） */}
+        <div style={{ padding: "10px 24px 0" }}>
+          <div style={{ backgroundColor: fixed.bg, border: `1px solid ${fixed.border}`, borderRadius: 8, padding: "12px 14px" }}>
+            <p style={{ margin: 0, fontSize: 11, color: "#374151", lineHeight: 1.8, whiteSpace: "pre-line" }}>
+              {fixed.text}
+            </p>
+          </div>
+        </div>
 
         {/* フッター */}
         <div style={{
@@ -224,16 +263,21 @@ function EmailPreview({
 // ── LINEプレビュー ────────────────────────────────────────────────────
 
 const LINE_BASE_MESSAGES: Record<NotifType, (name: string) => string> = {
+  // line.ts buildReceptionMessage と同一構成
   receive: (name) =>
-    `【ご予約受付のお知らせ】\n${name} のご予約を受け付けました。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n💴 ¥5,000\n\nスタッフ確認後、改めてご連絡します。`,
+    `【ご予約受付のお知らせ】\n${name} にてご予約を受け付けました。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n💴 ¥5,000\n\n内容を確認後、確定の通知をお送りします。\nしばらくお待ちください。`,
+  // line.ts buildConfirmationMessage と同一構成
   confirm: (name) =>
     `【ご予約確定のお知らせ】\n${name} のご予約が確定しました。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n💴 ¥5,000\n\nご来院をお待ちしております。`,
+  // line.ts buildUpdateMessage と同一構成
   change: (name) =>
-    `【ご予約変更のお知らせ】\n${name} のご予約日時が変更されました。\n\n▼ 変更前\n📅 4月30日(水) 10:00〜11:00\n\n▼ 変更後\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）`,
+    `【ご予約変更のお知らせ】\n${name} のご予約日時が変更されました。\n\n▼ 変更前\n📅 4月30日(水) 10:00〜11:00\n\n▼ 変更後\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n\nご不明な点はお問い合わせください。`,
+  // line.ts buildReminder24hMessage と同一構成
   reminder: (name) =>
-    `【明日のご予約リマインダー】\n${name} への明日のご予約をお知らせします。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n\nお忘れなくご来院ください。`,
+    `【明日のご予約リマインダー】\n${name} への明日のご予約をお知らせします。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n\nお忘れなくご来院ください。\n変更・キャンセルの場合はお早めにご連絡ください。`,
+  // line.ts buildRejectionMessage と同一構成
   reject: (name) =>
-    `【ご予約についてのお知らせ】\n${name} です。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n\n誠に恐れ入りますが、ご希望の日時はお受けできませんでした。\n別の日程をご検討いただけますと幸いです。`,
+    `【ご予約についてのお知らせ】\n${name} です。\n\n📅 5月1日(木) 14:00〜15:00\n💆 整体コース（60分）\n\n申し訳ございませんが、ご希望の日時は既にご予約が埋まっており、\nお受けすることができませんでした。\n別の日程をご検討いただけますと幸いです。`,
 };
 
 function LinePreview({
