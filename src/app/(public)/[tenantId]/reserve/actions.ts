@@ -197,7 +197,7 @@ export async function submitPublicReservation(
   // ── DB 照合でテナントIDを確定 ──
   const tenant = await prisma.tenant.findUnique({
     where:  { subdomain: tenantSlug },
-    select: { id: true, name: true, slotInterval: true },
+    select: { id: true, name: true, slotInterval: true, phone: true, address: true },
   });
   if (!tenant) return { errors: { general: "医院情報が見つかりません。" } };
 
@@ -339,6 +339,20 @@ export async function submitPublicReservation(
       <a href="${loginUrl}" style="display:inline-block;padding:10px 20px;background:#5BBAC4;color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
         マイページへログイン →
       </a>
+      ${(tenant.phone || tenant.address) ? `
+      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:20px;margin-bottom:4px;">
+        ${tenant.phone ? `<tr>
+          <td style="padding:10px 14px;background:#f3f4f6;border-radius:${tenant.address ? "8px 8px 0 0" : "8px"};color:#6b7280;width:40%;white-space:nowrap;">📞 電話番号</td>
+          <td style="padding:10px 14px;color:#111827;font-weight:600;">${tenant.phone}</td>
+        </tr>` : ""}
+        ${tenant.address ? `<tr>
+          <td style="padding:10px 14px;background:#f3f4f6;border-radius:${tenant.phone ? "0 0 8px 8px" : "8px"};color:#6b7280;">📍 住所</td>
+          <td style="padding:10px 14px;color:#111827;">
+            ${tenant.address}<br />
+            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.address ?? "")}" style="color:#5BBAC4;font-size:13px;">Google マップで見る →</a>
+          </td>
+        </tr>` : ""}
+      </table>` : ""}
       <p style="margin:16px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">
         ※ 暗証番号はスタッフにお伝えすることで変更できます。<br />
         ※ 本メールに心当たりがない場合はお手数ですが当院までご連絡ください。
