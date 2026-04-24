@@ -12,7 +12,6 @@
 import { prisma } from "@/lib/prisma";
 import { createReservation } from "@/services/reservationService";
 import { ensurePatientAccessToken } from "@/lib/mypage";
-import { sendSecurityEmail } from "@/lib/email";
 
 // ── 利用可能なタイムスロット取得 ─────────────────────────────────────
 
@@ -294,7 +293,7 @@ export async function submitPublicReservation(
     }
   }
 
-  // ── 共通サービスに委譲 ──
+  // ── 共通サービスに委譲（新規患者の場合は登録完了メールも同時送信）──
   const result = await createReservation({
     tenantId: tenant.id,
     patientId,
@@ -303,69 +302,20 @@ export async function submitPublicReservation(
     price,
     startAt,
     endAt,
+    // 新規患者のみ: 受付メールと同時に PIN コード通知メールを送信する
+    // 既存患者（Guard 1/2）では undefined のまま渡さず重複送信しない
+    ...(isNewPatient && email && newPatientPin ? {
+      newPatientWelcome: {
+        to:                 email,
+        pin:                newPatientPin,
+        birthDateFormatted: birthDateRaw,
+        loginUrl:           `${getBaseUrl()}/${tenantSlug}/mypage/login`,
+      },
+    } : {}),
   });
 
   if (!result.success) {
     return { errors: { general: result.error } };
-  }
-
-  // ── 新規患者登録通知（予約完了後に非同期送信）──────────────────────
-  if (isNewPatient && email && newPatientPin) {
-    const y  = parseInt(birthDateRaw.slice(0, 4), 10);
-    const mo = parseInt(birthDateRaw.slice(4, 6), 10);
-    const d  = parseInt(birthDateRaw.slice(6, 8), 10);
-    const bdFormatted = birthDateRaw;
-
-    const loginUrl = `${getBaseUrl()}/${tenantSlug}/mypage/login`;
-
-    const bodyHtml = `
-      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.7;">
-        このたびはご登録いただきありがとうございます。<br />
-        2回目以降のご予約には、以下のログイン情報をご利用ください。
-      </p>
-      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">
-        <tr>
-          <td style="padding:10px 14px;background:#f3f4f6;border-radius:8px 8px 0 0;color:#6b7280;width:50%;">ログインID（生年月日）</td>
-          <td style="padding:10px 14px;color:#111827;font-weight:600;">${bdFormatted}</td>
-        </tr>
-        <tr>
-          <td style="padding:10px 14px;background:#f3f4f6;border-radius:0 0 8px 8px;color:#6b7280;">Access PIN（暗証番号）</td>
-          <td style="padding:10px 14px;color:#111827;font-weight:600;font-size:20px;letter-spacing:0.25em;">${newPatientPin}</td>
-        </tr>
-      </table>
-      <p style="margin:0 0 8px;color:#374151;font-size:14px;">
-        マイページでご予約履歴の確認や登録情報の変更が行えます。
-      </p>
-      <a href="${loginUrl}" style="display:inline-block;padding:10px 20px;background:#5BBAC4;color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
-        マイページへログイン →
-      </a>
-      ${(tenant.phone || tenant.address) ? `
-      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:20px;margin-bottom:4px;">
-        ${tenant.phone ? `<tr>
-          <td style="padding:10px 14px;background:#f3f4f6;border-radius:${tenant.address ? "8px 8px 0 0" : "8px"};color:#6b7280;width:40%;white-space:nowrap;">📞 電話番号</td>
-          <td style="padding:10px 14px;color:#111827;font-weight:600;">${tenant.phone}</td>
-        </tr>` : ""}
-        ${tenant.address ? `<tr>
-          <td style="padding:10px 14px;background:#f3f4f6;border-radius:${tenant.phone ? "0 0 8px 8px" : "8px"};color:#6b7280;">📍 住所</td>
-          <td style="padding:10px 14px;color:#111827;">
-            ${tenant.address}<br />
-            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.address ?? "")}" style="color:#5BBAC4;font-size:13px;">Google マップで見る →</a>
-          </td>
-        </tr>` : ""}
-      </table>` : ""}
-      <p style="margin:16px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">
-        ※ 暗証番号はスタッフにお伝えすることで変更できます。<br />
-        ※ 本メールに心当たりがない場合はお手数ですが当院までご連絡ください。
-      </p>`;
-
-    sendSecurityEmail({
-      to:         email,
-      subject:    "【重要】アカウント登録完了とログイン情報のお知らせ",
-      tenantName: tenant.name,
-      bodyHtml,
-    }).catch((e: unknown) =>
-      console.error("[reserve/actions] 登録通知メール送信失敗:", e)
-    );
   }
 
   return { success: true };
