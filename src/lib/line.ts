@@ -254,8 +254,8 @@ export function buildUpdateMessage(args: NotificationTemplateArgs & {
  * お断り通知のメッセージ文字列を生成する。
  */
 export function buildRejectionMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, startAt, endAt, phone } = args;
-  return [
+  const { tenantName, menuName, durationMin, startAt, endAt, phone, customMessage } = args;
+  const lines = [
     "【ご予約についてのお知らせ】",
     `${tenantName} です。`,
     "",
@@ -266,7 +266,11 @@ export function buildRejectionMessage(args: NotificationTemplateArgs): string {
     "お受けすることができませんでした。",
     "別の日程をご検討いただけますと幸いです。",
     ...(phone ? ["", `📞 ${phone}`] : []),
-  ].join("\n");
+  ];
+  if (customMessage?.trim()) {
+    lines.push("", "─────────────────", customMessage.trim());
+  }
+  return lines.join("\n");
 }
 
 /**

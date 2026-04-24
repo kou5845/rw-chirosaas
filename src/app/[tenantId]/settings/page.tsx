@@ -62,6 +62,8 @@ export default async function SettingsPage({ params }: Props) {
       lineConfirmMsg:         true,
       lineChangeMsg:          true,
       lineReminderMsg:        true,
+      emailRejectMsg:         true,
+      lineRejectMsg:          true,
     },
   });
   if (!tenant) notFound();
@@ -229,6 +231,8 @@ export default async function SettingsPage({ params }: Props) {
               lineConfirmMsg={tenant.lineConfirmMsg}
               lineChangeMsg={tenant.lineChangeMsg}
               lineReminderMsg={tenant.lineReminderMsg}
+              emailRejectMsg={tenant.emailRejectMsg}
+              lineRejectMsg={tenant.lineRejectMsg}
             />
           </div>
         </section>
