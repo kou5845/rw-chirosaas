@@ -16,14 +16,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateSignature, messagingApi, webhook } from "@line/bot-sdk";
 import { prisma } from "@/lib/prisma";
 
-/** 電話番号らしい文字列かを判定する（ハイフンあり/なし両対応） */
-function looksLikePhoneNumber(text: string): boolean {
-  return /^[\d\-\s]{10,13}$/.test(text.trim());
+/** 全角数字・ハイフンを半角に変換する */
+function toHalfWidth(text: string): string {
+  return text
+    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[－ー‐]/g, "-")
+    .replace(/　/g, " ");
 }
 
-/** 電話番号を正規化する: "090-1234-5678" → "09012345678" */
+/** 電話番号らしい文字列かを判定する（全角/半角・ハイフンあり/なし両対応） */
+function looksLikePhoneNumber(text: string): boolean {
+  return /^[\d\-\s]{10,13}$/.test(toHalfWidth(text.trim()));
+}
+
+/** 電話番号を正規化する: "090-1234-5678" / "０９０－１２３４－５６７８" → "09012345678" */
 function normalizePhone(phone: string): string {
-  return phone.replace(/[\-\s]/g, "");
+  return toHalfWidth(phone).replace(/[\-\s]/g, "");
 }
 
 export async function POST(
@@ -79,9 +87,14 @@ export async function POST(
   const client = new messagingApi.MessagingApiClient({ channelAccessToken });
 
   // イベントを並列処理（返信トークンは5分以内に使い切る必要があるため）
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     body.events.map((event) => handleEvent(event, tenantId, tenant.name, client)),
   );
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      console.error(`[webhook/line] tenantId=${tenantId} event[${i}] 処理エラー:`, r.reason);
+    }
+  });
 
   return NextResponse.json({ ok: true });
 }
@@ -178,9 +191,9 @@ async function handleTextMessage(
 
   const normalizedPhone = normalizePhone(trimmed);
 
-  // ── 既に同じ lineUserId で紐付け済みか確認 ──
-  const alreadyLinked = await prisma.patient.findUnique({
-    where: { lineUserId },
+  // ── 既に同じ lineUserId でこのテナントに紐付け済みか確認 ──
+  const alreadyLinked = await prisma.patient.findFirst({
+    where: { tenantId, lineUserId },
     select: { displayName: true },
   });
   if (alreadyLinked) {
