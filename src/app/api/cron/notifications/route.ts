@@ -17,8 +17,30 @@
  *   - 処理上限: 1バッチ50件（タイムアウト防止）。
  */
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { pushText, buildNotificationMessage } from "@/lib/line";
+
+/**
+ * テナントの LINE カスタムメッセージを取得する（キャッシュ付き）。
+ * テナント固有タグ "tenant-msg-{tenantId}" でパージ可能。
+ * マルチテナント間のキャッシュ衝突を防ぐためキャッシュキーに tenantId を含める。
+ */
+function getCachedTenantLineMessages(tenantId: string) {
+  return unstable_cache(
+    () =>
+      prisma.tenant.findUnique({
+        where:  { id: tenantId },
+        select: {
+          lineConfirmMsg:  true,
+          lineReminderMsg: true,
+          lineChangeMsg:   true,
+        },
+      }),
+    [`tenant-msg-${tenantId}`],
+    { tags: [`tenant-msg-${tenantId}`], revalidate: false }
+  )();
+}
 
 // Vercel Edge Runtime では pg/prisma が動かないため nodejs runtime を明示
 export const runtime = "nodejs";
@@ -74,7 +96,7 @@ export async function GET(request: Request) {
           endAt:       true,
         },
       },
-      tenant: { select: { name: true } },
+      tenant: { select: { name: true, id: true } },
     },
     take:    BATCH_LIMIT,
     orderBy: { scheduledAt: "asc" },
@@ -104,15 +126,27 @@ export async function GET(request: Request) {
       continue;
     }
 
+    // テナントの LINE カスタムメッセージをキャッシュ経由で取得
+    const tenantMsgs = await getCachedTenantLineMessages(item.tenant.id);
+
+    // 通知種別に対応するカスタムメッセージを選択
+    const customMessage =
+      item.notificationType === "confirmation"
+        ? tenantMsgs?.lineConfirmMsg
+        : item.notificationType === "reminder_24h" || item.notificationType === "reminder_2h"
+        ? tenantMsgs?.lineReminderMsg
+        : null;
+
     // メッセージ文字列を生成
     const text = buildNotificationMessage(item.notificationType, {
-      tenantName:  item.tenant.name,
-      patientName: item.patient.displayName,
-      menuName:    item.appointment.menuName,
-      durationMin: item.appointment.durationMin,
-      price:       item.appointment.price,
-      startAt:     item.appointment.startAt,
-      endAt:       item.appointment.endAt,
+      tenantName:    item.tenant.name,
+      patientName:   item.patient.displayName,
+      menuName:      item.appointment.menuName,
+      durationMin:   item.appointment.durationMin,
+      price:         item.appointment.price,
+      startAt:       item.appointment.startAt,
+      endAt:         item.appointment.endAt,
+      customMessage: customMessage ?? null,
     });
 
     try {

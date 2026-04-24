@@ -8,7 +8,7 @@
  *   - 全 Prisma クエリに tenantId を含めること（絶対ルール）
  */
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export type SettingsState = {
@@ -222,6 +222,81 @@ export async function updateEmailCustomMessage(
     });
   } catch (err) {
     console.error("[updateEmailCustomMessage] DB error:", err);
+    return { errors: { general: "保存中にエラーが発生しました。" } };
+  }
+
+  revalidatePath(`/${tenantSlug}/settings`);
+  return { success: true };
+}
+
+// ── 通知カスタムメッセージ更新（プロプラン限定・プラットフォーム×種別）────────────
+
+export type NotificationCustomMessageState = {
+  success?: boolean;
+  errors?: { general?: string; message?: string };
+} | null;
+
+type Platform  = "email" | "line";
+type NotifType = "confirm" | "change" | "reminder";
+
+const FIELD_MAP: Record<`${Platform}:${NotifType}`, string> = {
+  "email:confirm":  "emailConfirmMsg",
+  "email:change":   "emailChangeMsg",
+  "email:reminder": "emailReminderMsg",
+  "line:confirm":   "lineConfirmMsg",
+  "line:change":    "lineChangeMsg",
+  "line:reminder":  "lineReminderMsg",
+};
+
+/**
+ * プラットフォーム × 通知種別ごとのカスタムメッセージを保存する。
+ * バックエンドでプロプランを検証し、保存後に cron バッチ用のキャッシュをパージする。
+ */
+export async function updateNotificationCustomMessage(
+  _prev: NotificationCustomMessageState,
+  formData: FormData
+): Promise<NotificationCustomMessageState> {
+  const tenantSlug = formData.get("tenantSlug") as string;
+  const platform   = formData.get("platform")   as Platform;
+  const notifType  = formData.get("notifType")  as NotifType;
+
+  if (!tenantSlug || !platform || !notifType) {
+    return { errors: { general: "パラメータが不正です。" } };
+  }
+
+  const fieldName = FIELD_MAP[`${platform}:${notifType}`];
+  if (!fieldName) return { errors: { general: "パラメータが不正です。" } };
+
+  // CLAUDE.md 絶対ルール: DB照合でtenantIdを確定
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: tenantSlug },
+    select: { id: true, plan: true },
+  });
+  if (!tenant) return { errors: { general: "テナントが見つかりません。" } };
+
+  // バックエンドでのプランガード（2層バリデーション）
+  if (tenant.plan !== "pro") {
+    return { errors: { general: "この機能はプロプラン限定です。" } };
+  }
+
+  const raw     = (formData.get("message") as string | null) ?? "";
+  const message = raw.trim() || null;
+
+  if (message && message.length > 500) {
+    return { errors: { message: "500文字以内で入力してください。" } };
+  }
+
+  try {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data:  { [fieldName]: message },
+    });
+
+    // cron バッチが古いメッセージを送信しないようキャッシュをパージ
+    // キャッシュキーにtenantIdを含めることでマルチテナント間の衝突を防ぐ
+    revalidateTag(`tenant-msg-${tenant.id}`, "default");
+  } catch (err) {
+    console.error("[updateNotificationCustomMessage] DB error:", err);
     return { errors: { general: "保存中にエラーが発生しました。" } };
   }
 

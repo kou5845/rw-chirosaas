@@ -21,7 +21,8 @@ type TenantInfo = {
   lineEnabled:            boolean;
   lineChannelAccessToken: string | null;
   emailEnabled:           boolean;
-  emailCustomMessage?:    string | null;
+  emailChangeMsg?:        string | null;
+  lineChangeMsg?:         string | null;
 };
 
 type PatientInfo = {
@@ -86,7 +87,7 @@ export async function sendUpdateNotification({
     const client = getLineClient(tenant);
     if (client) {
       try {
-        const text = buildUpdateMessage(templateArgs);
+        const text = buildUpdateMessage({ ...templateArgs, customMessage: tenant.lineChangeMsg });
         await client.pushMessage({
           to:       patient.lineUserId,
           messages: [{ type: "text", text }],
@@ -114,7 +115,7 @@ export async function sendUpdateNotification({
         address:       tenant.address,
         oldStartAt,
         oldEndAt,
-        customMessage: tenant.emailCustomMessage,
+        customMessage: tenant.emailChangeMsg,
       });
       console.log("[notificationService] メール変更通知送信");
     } catch (e) {
@@ -183,7 +184,6 @@ export async function sendCancellationNotification({
         endAt:         appointment.endAt,
         phone:         tenant.phone,
         address:       tenant.address,
-        customMessage: tenant.emailCustomMessage,
       });
       console.log("[notificationService] メールキャンセル通知送信");
     } catch (e) {

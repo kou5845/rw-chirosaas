@@ -158,7 +158,7 @@ export async function upsertAppointment(
       if (dateChanged) {
         const tenant = await prisma.tenant.findUnique({
           where:  { id: tenantId },
-          select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailCustomMessage: true },
+          select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailChangeMsg: true, lineChangeMsg: true },
         });
         if (tenant) {
           sendUpdateNotification({

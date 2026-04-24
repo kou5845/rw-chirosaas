@@ -74,7 +74,8 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
           lineEnabled:            true,
           lineChannelAccessToken: true,   // テナント固有のLINEトークン
           emailEnabled:           true,
-          emailCustomMessage:     true,
+          emailReminderMsg:       true,
+          lineReminderMsg:        true,
         },
       },
       patient: {
@@ -153,7 +154,7 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
           const lineClient = new messagingApi.MessagingApiClient({
             channelAccessToken: lineChannelToken,
           });
-          const text = buildReminder24hMessage(templateArgs);
+          const text = buildReminder24hMessage({ ...templateArgs, customMessage: tenant.lineReminderMsg });
           await lineClient.pushMessage({
             to:       patient.lineUserId,
             messages: [{ type: "text", text }],
@@ -187,7 +188,7 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
           phone:         tenant.phone,
           address:       tenant.address,
           mypageUrl,
-          customMessage: tenant.emailCustomMessage,
+          customMessage: tenant.emailReminderMsg,
         });
         emailSent = true;
         console.log(

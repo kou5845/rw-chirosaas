@@ -57,17 +57,19 @@ export async function pushText(to: string, text: string): Promise<void> {
 // ── 通知タイプ別メッセージテンプレート ───────────────────────────
 
 type NotificationTemplateArgs = {
-  tenantName:  string;
-  patientName: string;
-  menuName:    string;
-  durationMin: number;
-  price:       number;
-  startAt:     Date;
-  endAt:       Date;
-  phone?:      string | null;
-  address?:    string | null;
+  tenantName:    string;
+  patientName:   string;
+  menuName:      string;
+  durationMin:   number;
+  price:         number;
+  startAt:       Date;
+  endAt:         Date;
+  phone?:        string | null;
+  address?:      string | null;
   /** 患者専用マイページURL（設定時はメッセージ末尾に案内を追加する） */
-  mypageUrl?:  string | null;
+  mypageUrl?:    string | null;
+  /** プロプラン向けカスタムメッセージ（設定時はメッセージ末尾に追加する） */
+  customMessage?: string | null;
 };
 
 /** 曜日ラベル */
@@ -97,7 +99,7 @@ function fmtTime(d: Date): string {
  * 予約確定通知のメッセージ文字列を生成する。
  */
 export function buildConfirmationMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address, mypageUrl } = args;
+  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address, mypageUrl, customMessage } = args;
   const lines = [
     "【ご予約確定のお知らせ】",
     `${tenantName} のご予約が確定しました。`,
@@ -123,6 +125,9 @@ export function buildConfirmationMessage(args: NotificationTemplateArgs): string
       mypageUrl,
     );
   }
+  if (customMessage?.trim()) {
+    lines.push("", "─────────────────", customMessage.trim());
+  }
   return lines.join("\n");
 }
 
@@ -130,7 +135,7 @@ export function buildConfirmationMessage(args: NotificationTemplateArgs): string
  * 24時間前リマインダーのメッセージ文字列を生成する。
  */
 export function buildReminder24hMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, startAt, endAt, mypageUrl } = args;
+  const { tenantName, menuName, durationMin, startAt, endAt, mypageUrl, customMessage } = args;
   const lines = [
     "【明日のご予約リマインダー】",
     `${tenantName} への明日のご予約をお知らせします。`,
@@ -149,6 +154,9 @@ export function buildReminder24hMessage(args: NotificationTemplateArgs): string 
       mypageUrl,
     );
   }
+  if (customMessage?.trim()) {
+    lines.push("", "─────────────────", customMessage.trim());
+  }
   return lines.join("\n");
 }
 
@@ -156,8 +164,8 @@ export function buildReminder24hMessage(args: NotificationTemplateArgs): string 
  * 2時間前リマインダーのメッセージ文字列を生成する。
  */
 export function buildReminder2hMessage(args: NotificationTemplateArgs): string {
-  const { menuName, durationMin, startAt, endAt } = args;
-  return [
+  const { menuName, durationMin, startAt, endAt, customMessage } = args;
+  const lines = [
     "【ご予約2時間前のリマインダー】",
     "本日のご予約まであと2時間です。",
     "",
@@ -165,7 +173,11 @@ export function buildReminder2hMessage(args: NotificationTemplateArgs): string {
     `💆 ${menuName}（${durationMin}分）`,
     "",
     "お気をつけてお越しください。",
-  ].join("\n");
+  ];
+  if (customMessage?.trim()) {
+    lines.push("", "─────────────────", customMessage.trim());
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -217,8 +229,8 @@ export function buildUpdateMessage(args: NotificationTemplateArgs & {
   oldStartAt: Date;
   oldEndAt:   Date;
 }): string {
-  const { tenantName, menuName, durationMin, startAt, endAt, oldStartAt, oldEndAt, phone } = args;
-  return [
+  const { tenantName, menuName, durationMin, startAt, endAt, oldStartAt, oldEndAt, phone, customMessage } = args;
+  const lines = [
     "【ご予約変更のお知らせ】",
     `${tenantName} のご予約日時が変更されました。`,
     "",
@@ -231,7 +243,11 @@ export function buildUpdateMessage(args: NotificationTemplateArgs & {
     "",
     "ご不明な点はお問い合わせください。",
     ...(phone ? [`📞 ${phone}`] : []),
-  ].join("\n");
+  ];
+  if (customMessage?.trim()) {
+    lines.push("", "─────────────────", customMessage.trim());
+  }
+  return lines.join("\n");
 }
 
 /**
