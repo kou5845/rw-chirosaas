@@ -198,7 +198,13 @@ export async function deletePatient(
       // 3. 患者直結の通知キュー残り
       await tx.notificationQueue.deleteMany({ where: { patientId, tenantId } });
 
-      // 4. 患者本体を削除
+      // 4. lineUserId を先に解放（unique 制約を持つため、削除前に NULL 化して安全に解放）
+      await tx.patient.update({
+        where: { id: patientId },
+        data:  { lineUserId: null, accessToken: null },
+      });
+
+      // 5. 患者本体を削除
       await tx.patient.delete({ where: { id: patientId } });
     });
   } catch (e) {

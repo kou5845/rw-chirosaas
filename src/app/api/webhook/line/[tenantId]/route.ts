@@ -217,9 +217,10 @@ async function handleTextMessage(
 
   const normalizedPhone = normalizePhone(trimmed);
 
-  // ── 既に同じ lineUserId でこのテナントに紐付け済みか確認 ──
+  // ── 既に同じ lineUserId でこのテナントに紐付け済みか確認（有効患者のみ）──
+  // isActive: true を必須にすることで、削除・非アクティブ化済み患者を「連携済み」と誤判定しない
   const alreadyLinked = await prisma.patient.findFirst({
-    where: { tenantId: tenant.id, lineUserId },
+    where: { tenantId: tenant.id, lineUserId, isActive: true },
     select: { displayName: true },
   });
   if (alreadyLinked) {
@@ -266,6 +267,13 @@ async function handleTextMessage(
     });
     return;
   }
+
+  // ── 非アクティブ患者が同じ lineUserId を保持している場合は解放する ──
+  // @unique 制約の競合を防ぐため、紐付け前に古いレコードの lineUserId を NULL にする
+  await prisma.patient.updateMany({
+    where: { tenantId: tenant.id, lineUserId, isActive: false },
+    data:  { lineUserId: null },
+  });
 
   // ── 紐付け保存 ──
   await prisma.patient.update({

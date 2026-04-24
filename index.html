@@ -3,321 +3,509 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chiro-SaaS 操作マニュアル</title>
+  <title>Chiro-SaaS 導入・運用マニュアル</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
 
     :root {
-      --primary-color: #3B82F6;
-      --secondary-color: #10B981;
-      --text-main: #333333;
-      --text-muted: #666666;
-      --bg-color: #F9FAFB;
-      --bg-card: #FFFFFF;
-      --border-color: #E5E7EB;
-      --accent-color: #EEF2FF;
-      --warning-color: #F59E0B;
+      /* カラーパレット（信頼・清潔・静謐） */
+      --primary: #3B82F6;
+      --primary-light: #EFF6FF;
+      --secondary: #10B981;
+      --secondary-light: #ECFDF5;
+      --danger: #EF4444;
+      --warning: #F59E0B;
+      --bg-page: #F9FAFB;
+      --bg-surface: #FFFFFF;
+      --text-main: #111827;
+      --text-muted: #6B7280;
+      --border: #E5E7EB;
+      
+      --sidebar-width: 280px;
     }
 
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      font-family: 'Google Sans', 'Noto Sans JP', sans-serif;
+      font-family: 'Inter', 'Noto Sans JP', sans-serif;
       color: var(--text-main);
-      background-color: var(--bg-color);
+      background-color: var(--bg-page);
       line-height: 1.8;
-      margin: 0;
-      padding: 0;
+      font-size: 15px;
       -webkit-font-smoothing: antialiased;
     }
 
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 40px 20px;
+    /* レイアウト */
+    .layout {
+      display: flex;
+      min-height: 100vh;
     }
 
-    .paper {
-      background: var(--bg-card);
-      padding: 60px 80px;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    /* サイドバー */
+    .sidebar {
+      width: var(--sidebar-width);
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      overflow-y: auto;
+      padding: 32px 24px;
     }
 
-    h1 {
-      font-size: 2.2rem;
-      color: var(--primary-color);
-      border-bottom: 3px solid var(--primary-color);
-      padding-bottom: 12px;
-      margin-bottom: 8px;
+    .sidebar-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
     }
 
-    .subtitle {
-      font-size: 1.1rem;
+    .nav-list { list-style: none; }
+    .nav-item { margin-bottom: 8px; }
+    .nav-link {
+      display: block;
+      text-decoration: none;
       color: var(--text-muted);
-      margin-bottom: 40px;
+      font-weight: 500;
+      padding: 8px 12px;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .nav-link:hover {
+      background-color: var(--primary-light);
+      color: var(--primary);
+    }
+
+    /* メインコンテンツ */
+    .main-content {
+      flex: 1;
+      margin-left: var(--sidebar-width);
+      padding: 48px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+
+    /* 見出し */
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 16px;
+      letter-spacing: -0.03em;
     }
 
     h2 {
-      font-size: 1.6rem;
-      color: #222;
-      border-left: 5px solid var(--secondary-color);
-      padding-left: 16px;
-      margin-top: 48px;
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-top: 64px;
       margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border);
+    }
+    
+    h2::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 1em;
+      background: var(--primary);
+      margin-right: 12px;
+      vertical-align: -2px;
+      border-radius: 2px;
     }
 
     h3 {
       font-size: 1.3rem;
-      color: #333;
-      margin-top: 32px;
+      font-weight: 600;
+      margin-top: 40px;
       margin-bottom: 16px;
     }
 
-    p {
-      margin-bottom: 16px;
+    h4 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-top: 24px;
+      margin-bottom: 12px;
+      color: var(--primary);
     }
 
-    ul, ol {
+    p { margin-bottom: 20px; }
+
+    ul, ol { margin-bottom: 24px; padding-left: 28px; }
+    li { margin-bottom: 8px; }
+
+    /* ボックススタイル */
+    .alert {
+      padding: 20px 24px;
+      border-radius: 12px;
       margin-bottom: 24px;
-      padding-left: 24px;
+      line-height: 1.6;
     }
+    .alert-primary { background: var(--primary-light); border: 1px solid #BFDBFE; }
+    .alert-success { background: var(--secondary-light); border: 1px solid #A7F3D0; }
+    .alert-warning { background: #FFFBEB; border: 1px solid #FDE68A; }
+    
+    .alert h4 { margin-top: 0; margin-bottom: 8px; color: inherit; }
+    .alert p:last-child { margin-bottom: 0; }
 
-    li {
-      margin-bottom: 8px;
-    }
-
-    .screenshot-placeholder {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 240px;
-      background-color: #F3F4F6;
-      border: 2px dashed #9CA3AF;
-      border-radius: 8px;
-      color: #6B7280;
-      font-weight: 500;
-      margin: 24px 0;
-    }
-
-    .info-box {
-      background-color: var(--accent-color);
-      border-left: 4px solid var(--primary-color);
-      padding: 16px 24px;
-      border-radius: 4px;
-      margin-bottom: 24px;
-    }
-
-    .warning-box {
-      background-color: #FEF3C7;
-      border-left: 4px solid var(--warning-color);
-      padding: 16px 24px;
-      border-radius: 4px;
-      margin-bottom: 24px;
-    }
-
-    .info-box p, .warning-box p {
-      margin: 0;
-      word-break: break-all;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
+    /* 比較表・料金表 */
+    .table-container {
+      overflow-x: auto;
       margin-bottom: 32px;
-      background: white;
-      border-radius: 8px;
-      overflow: hidden;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-
+    
+    table { width: 100%; border-collapse: collapse; }
     th, td {
-      border: 1px solid var(--border-color);
-      padding: 14px 16px;
+      padding: 16px 20px;
       text-align: left;
+      border-bottom: 1px solid var(--border);
     }
-
     th {
       background-color: #F8FAFC;
       font-weight: 600;
-      color: #334155;
+      color: #475569;
     }
-
-    .tag {
+    tr:last-child td { border-bottom: none; }
+    
+    .badge {
       display: inline-block;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 0.85rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
       font-weight: 600;
-      margin-right: 8px;
+      margin-bottom: 8px;
     }
+    .badge-pro { background: var(--primary); color: white; }
+    .badge-simple { background: var(--text-muted); color: white; }
 
-    .tag.primary { background-color: var(--primary-color); color: white; }
-    .tag.secondary { background-color: var(--secondary-color); color: white; }
-
-    .feature-list {
+    /* 実画像のスタイル */
+    .screenshot-img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin: 24px 0 32px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      background-color: var(--bg-surface);
+    }
+    
+    /* 複数画像のグリッド配置用 */
+    .screenshot-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin: 24px 0 32px;
+      align-items: start;
+    }
+    .screenshot-grid .screenshot-img {
+      margin: 0;
     }
 
-    .feature-card {
-      background: #F8FAFC;
-      border: 1px solid var(--border-color);
-      padding: 16px;
-      border-radius: 8px;
+    hr {
+      border: 0;
+      height: 1px;
+      background: var(--border);
+      margin: 48px 0;
     }
 
-    .feature-card h4 {
-      margin-top: 0;
-      color: var(--primary-color);
+    /* FAQ */
+    .faq-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      background: var(--bg-surface);
     }
-
-    @media print {
-      body { background-color: white; }
-      .container { max-width: 100%; padding: 0; }
-      .paper { box-shadow: none; padding: 20px; border: none; }
-      .screenshot-placeholder { break-inside: avoid; }
-      h2 { break-after: avoid; }
+    .faq-q {
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 8px;
+      display: flex;
     }
+    .faq-q::before { content: "Q."; margin-right: 8px; }
+    .faq-a {
+      color: var(--text-main);
+      display: flex;
+    }
+    .faq-a::before { content: "A."; margin-right: 8px; font-weight: 700; color: var(--text-muted); }
+    .faq-a div { flex: 1; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="paper">
-      <h1>Chiro-SaaS 操作マニュアル</h1>
-      <p class="subtitle">効率的な整骨院・ジム運営システム - ユーザーガイド V1.0</p>
 
-      <h2>1. アプリの概要</h2>
-      <p>
-        本アプリは、<strong>整骨院やパーソナルジム</strong>の業務効率化を目指したSaaS型管理システムです。紙のカルテや煩雑な予約管理をデジタル化し、スムーズな店舗運営をサポートするコンセプトで設計されています。
+<div class="layout">
+  <!-- サイドバー（目次） -->
+  <aside class="sidebar">
+    <div class="sidebar-title">Chiro-SaaS マニュアル</div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="#section-1" class="nav-link">1. Chiro-SaaSが選ばれる理由</a></li>
+      <li class="nav-item"><a href="#section-2" class="nav-link">2. プラン比較：A院の圧倒的メリット</a></li>
+      <li class="nav-item"><a href="#section-3" class="nav-link">3. 導入・初期設定の流れ</a></li>
+      <li class="nav-item"><a href="#section-4" class="nav-link">4. ダッシュボード（全体把握）</a></li>
+      <li class="nav-item"><a href="#section-5" class="nav-link">5. 予約管理（安全な承認フロー）</a></li>
+      <li class="nav-item"><a href="#section-6" class="nav-link">6. メディア・カルテ・トレーニング管理</a></li>
+      <li class="nav-item"><a href="#section-7" class="nav-link">7. 自動通知・オリジナルメッセージ</a></li>
+      <li class="nav-item"><a href="#section-8" class="nav-link">8. 患者さま専用ページ機能</a></li>
+      <li class="nav-item"><a href="#section-9" class="nav-link">9. よくある質問（FAQ）</a></li>
+    </ul>
+  </aside>
+
+  <!-- メインコンテンツ -->
+  <main class="main-content">
+    <div class="container">
+      
+      <p style="color: var(--primary); font-weight: 600; margin-bottom: 8px;">効率的な整骨院・ジム運営システム</p>
+      <h1>Chiro-SaaS 製品マニュアル</h1>
+      <p class="subtitle" style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 40px;">
+        最新Webテクノロジーを活用して、複雑な予約管理・カルテ整理・顧客フォローを<br>直感的な操作で自動化するプロフェッショナルSaaSの全機能解説です。
       </p>
-      
-      <div class="feature-list">
-        <div class="feature-card">
-          <h4>気の利いた裏側機能</h4>
+
+      <!-- ============================================== -->
+      <section id="section-1">
+        <h2>1. Chiro-SaaSが選ばれる理由（3つのメリット）</h2>
+        <p>本システムは単なる「デジタル予約表」ではありません。現場の業務負担を極限まで減らし、売上アップにつなげるための専用設計が施されています。</p>
+        
+        <div class="alert alert-success">
+          <h4>① 予約業務の「完全自動化」で電話応対ゼロへ</h4>
+          <p>24時間365日対応のスマホ最適化Web予約フォームを標準装備。入った予約は一覧に自動反映され、スタッフは「承認ボタン」を押すだけ。仮押さえ防止の安全な承認フローを備えています。</p>
+        </div>
+        <div class="alert alert-success">
+          <h4>② LINE＆メールの自動通知で「ドタキャン」を撲滅</h4>
+          <p>予約時・承認時はもちろん、<strong>来店24時間前・2時間前</strong>に自動でリマインダーを送信。無断キャンセルを劇的に予防します。</p>
+        </div>
+        <div class="alert alert-success">
+          <h4>③ 患者専用「マイページ」で顧客満足度が劇的アップ</h4>
+          <p>患者様には専用マイページが発行され、次回の予約日時や過去の施術記録（プロ版ならトレーニング実績も）をいつでもスマホで確認できます。</p>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <section id="section-2">
+        <h2>2. プラン比較：A院（プロ版）の圧倒的メリット</h2>
+        <p>規模に合わせて2パターンの運営スタイルをご用意しています。特に**A院（プロ版）**は、複数スタッフの管理とリッチな顧客体験を提供するための強力な機能を備えています。</p>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>機能・特徴</th>
+                <th><span class="badge badge-pro">A院（プロ版）</span><br>やまだ整骨院</th>
+                <th><span class="badge badge-simple">B院（シンプル版）</span><br>さくら整骨院</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>スタッフ管理</strong></td>
+                <td>複数のスタッフを登録可能。<br>Web予約時に<strong>「スタッフ指名」</strong>機能が使えます。</td>
+                <td>院長1名での完全個人運営向け。</td>
+              </tr>
+              <tr>
+                <td><strong>カルテ情報<br>（メディア管理）</strong></td>
+                <td>テキストだけでなく、<strong>施術前後の写真やフォーム確認動画（最大50MB）</strong>をセキュアにクラウド保存・比較できます。</td>
+                <td>症状と経過のテキストメモのみ。高速入力に特化しています。</td>
+              </tr>
+              <tr>
+                <td><strong>トレーニング管理</strong></td>
+                <td>スクワットなどの重量推移グラフ、体組成データの蓄積・表示が可能。<strong>継続・リピート率向上に直結します。</strong></td>
+                <td>非対応</td>
+              </tr>
+              <tr>
+                <td><strong>通知カスタムメッセージ</strong></td>
+                <td>自動送信されるLINEやメールに、<strong>院独自のメッセージ</strong>（※保険証持参の案内など）を差し込めます。</td>
+                <td>定型の自動送信メッセージのみ。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- テストログイン情報 -->
+        <div class="alert alert-primary">
+          <h4>🔑 テスト環境 ログイン情報</h4>
+          <p>ご自身で操作感をお試しいただけます。</p>
           <ul>
-            <li><strong>自動リマインダー</strong>: 予約の24時間前と2時間前にLINE等で通知を自動送信。ドタキャンを効果的に防止します。</li>
-            <li><strong>大容量メディアと安全な管理</strong>: 最大50MBまでの写真・動画アップロードに対応。一時的な署名付きURL (Signed URL) を発行し、セキュアに管理されます。</li>
+            <li><strong>【プロ版】やまだ整骨院：</strong> ID: <code>yamada-admin</code> / Pass: <code>password123</code></li>
+            <li><strong>【シンプル版】さくら整骨院：</strong> ID: <code>sakura-admin</code> / Pass: <code>password123</code></li>
           </ul>
         </div>
-        <div class="feature-card">
-          <h4>効率化と利便性</h4>
-          <ul>
-            <li>直感的なドラッグ＆ドロップ感覚のカレンダー予約管理</li>
-            <li>予約枠に応じたダイナミックなタイムスロット制御</li>
-            <li>患者がスマホから簡単にアクセス・予約できる「マイページ」</li>
-          </ul>
+      </section>
+
+      <!-- ============================================== -->
+      <section id="section-3">
+        <h2>3. 導入・初期設定の流れ</h2>
+        <p>導入後、患者様からのWeb予約を受け付けるために最初に行う簡単なステップです。「設定」タブからすべて完結します。</p>
+
+        <ol>
+          <li><strong>院情報と営業時間の登録</strong><br>基本情報に加え、曜日ごとの営業時間と定休日を設定します（祝日の特別設定も可能）。</li>
+          <li><strong>メニューとWeb予約枠の自動制御</strong><br>「予約を何分区切りで受け付けるか（15/20/30/60分）」「同じ時間帯に最大何人まで予約を被せて取れるか」を設定するだけでシステムが自動計算します。</li>
+          <li><strong>スタッフの設定（A院のみ）</strong><br>勤務するスタッフを登録します。</li>
+          <li><strong>LINE通知・独自メッセージの設定</strong><br>公式LINEとの連携と、予約確定時やリマインド時に添えるオリジナルメッセージ文を設定します。</li>
+        </ol>
+
+        <!-- 初期設定画面群（横並びグリッドや縦積みで表示） -->
+        <img src="images/images%3Ass_settings1.png" alt="設定画面" class="screenshot-img">
+        <div class="screenshot-grid">
+          <img src="images/images%3Ass_setting2.png" alt="設定画面の続き" class="screenshot-img">
+          <img src="images/images%3Ass_settings3.png" alt="設定項目詳細" class="screenshot-img">
         </div>
-      </div>
+        <div class="screenshot-grid">
+          <img src="images/images%3Ass_settings5.png" alt="メニュー・枠設定" class="screenshot-img">
+          <img src="images/images%3Ass_settings6.png" alt="休業日設定" class="screenshot-img">
+        </div>
+        <div class="screenshot-grid">
+          <img src="images/images%3Ass_settings7.png" alt="LINE公式連携" class="screenshot-img">
+          <img src="images/images%3Ass_settings8.png" alt="スタッフ設定" class="screenshot-img">
+        </div>
+      </section>
 
-      <h2>2. 【重要】テストログイン情報</h2>
-      <p>本システムには、利用規模やプランに応じた「A院（プロ版）」と「B院（シンプル版）」の2つの環境が用意されています。</p>
-      
-      <div class="info-box">
-        <p><strong>ログインURL:</strong> （ここにログイン画面のURLをご記載ください）</p>
-      </div>
+      <!-- ============================================== -->
+      <section id="section-4">
+        <h2>4. ダッシュボード（1日の全体把握）</h2>
+        <p>ログインして最初に表示される画面です。その日の業務をスムーズに進めるための「コックピット」として機能します。</p>
 
-      <table>
-        <thead>
-          <tr>
-            <th>店舗</th>
-            <th>特徴</th>
-            <th>ログインID</th>
-            <th>パスワード</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>A院（やまだ整骨院）</strong></td>
-            <td><span class="tag primary">プロ版</span><br>フル機能・詳細なトレーニング記録対応</td>
-            <td><code>yamada-admin</code><br>または<br><code>yamada.admin@example.com</code></td>
-            <td><code>password123</code></td>
-          </tr>
-          <tr>
-            <td><strong>B院（さくら整骨院）</strong></td>
-            <td><span class="tag secondary">シンプル版</span><br>小規模・効率重視のスリム運用</td>
-            <td><code>sakura-admin</code><br>または<br><code>sakura.admin@example.com</code></td>
-            <td><code>password123</code></td>
-          </tr>
-        </tbody>
-      </table>
+        <ul>
+          <li><strong>KPIサマリー：</strong> 今日の来院予定数、今週の予約数などが直感的に把握できます。</li>
+          <li><strong>直近のアクション：</strong> 「承認待ちのWeb予約」や「近日中の来院予定」がリストアップされます。</li>
+          <li><strong>注意事項アラート：</strong> スタッフが退勤を忘れている場合など、システムが自動で検知してアラートを表示します。</li>
+        </ul>
 
-      <h2>3. A院（プロ版）と B院（シンプル版）の違い</h2>
-      <p>本システムは、店舗の設定（フィーチャートグル）によって、表示されるメニューやカルテの入力項目がダイナミックに変化します。</p>
+        <img src="images/images%3Ass_dashboard.png" alt="ダッシュボードの全容" class="screenshot-img">
+      </section>
 
-      <table>
-        <thead>
-          <tr>
-            <th>機能</th>
-            <th>A院（やまだ整骨院）</th>
-            <th>B院（さくら整骨院）</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>スタッフ管理</strong></td>
-            <td>複数スタッフの登録・指名予約が可能</td>
-            <td>院長1名のみ（設定項目非表示）</td>
-          </tr>
-          <tr>
-            <td><strong>カルテ情報</strong></td>
-            <td>部位選択、施術内容、写真/動画のメディア添付</td>
-            <td>症状メモと経過メモのみのテキスト入力</td>
-          </tr>
-          <tr>
-            <td><strong>トレーニング記録</strong></td>
-            <td>種目別実績、分析グラフ、体組成データ記録</td>
-            <td>利用不可（非表示）</td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- ============================================== -->
+      <section id="section-5">
+        <h2>5. 予約管理（安全な承認フローとリスケジュール）</h2>
+        <p>Chiro-SaaSのもっとも強力な機能の一つです。視覚的にわかりやすいカレンダーで、予約ミスやダブルブッキングをシステムが防ぎます。</p>
 
-      <h2>4. 各メニューと機能の詳細説明</h2>
+        <h3>5.1 安全・確実な「承認フロー」</h3>
+        <p>患者様がWebから予約した段階では<strong>「仮受付（Pending）」</strong>となります。内容や過去履歴に問題がないかスタッフが確認して<strong>「確定（Confirmed）」</strong>ボタンを押すことで、初めて予約成立となり通知が飛びます。</p>
 
-      <h3>4.1. ダッシュボード (Dashboard)</h3>
-      <p>一日の流れをひと目で把握できるホーム画面です。本日の予約状況、ステータスサマリー、直近の対応予定が表示されます。</p>
-      <div class="screenshot-placeholder">[screenshot: ダッシュボード画面のキャプチャ]</div>
+        <h3>5.2 ドラッグ＆ドロップによる直感的操作</h3>
+        <p>患者様から「明日の同じ時間に変更してほしい」と電話があった際は、カレンダー上の予約ブロックをスマホやマウスで<strong>長押しして移動（ドラッグ＆ドロップ）させるだけ</strong>で変更が完了します。<br>※システムが自動で「同時予約上限」を超えていないか裏側でチェックするため、誤って定員オーバーの枠に移動させてしまう事故は起きません。</p>
 
-      <h3>4.2. 予約管理 (Appointments)</h3>
-      <p>カレンダーベースで予約を直感的に管理します。<code>pending（仮受付）</code> → <code>confirmed（確定）</code> → <code>completed（完了）</code> のステータス変更履歴をシステムが自動追跡します。</p>
-      <ul>
-        <li><strong>空き枠のタップ:</strong> 新規の患者予約を登録します（設定された間隔に応じてタイムスロットが区切られます）。</li>
-        <li><strong>ステータス変更:</strong> Web予約が入ると「仮受付」となります。内容を確認し「確定」へ変更してください。</li>
-      </ul>
-      <div class="screenshot-placeholder">[screenshot: カレンダー予約画面のキャプチャ]</div>
+        <img src="images/images%3Ass_calendar1.png" alt="カレンダー予約画面の基本" class="screenshot-img">
+        <img src="images/images%3Ass_calendar2.png" alt="予約の承認とドラッグ操作" class="screenshot-img">
 
-      <h3>4.3. 患者管理 (Patients)</h3>
-      <p>患者様の基本情報リストです。LINEの連携状況や緊急連絡先、スタッフ間だけで共有する「内部メモ」を管理します。</p>
-      <div class="screenshot-placeholder">[screenshot: 患者一覧・詳細画面のキャプチャ]</div>
+      </section>
 
-      <h3>4.4. カルテ・トレーニング記録 (Kartes & Trainings)</h3>
-      <p>施術やトレーニングの記録を作成・閲覧します。A院（プロ版）ではより詳細な経過を入力できます。</p>
-      <ul>
-        <li><strong>メディア管理（A院のみ）:</strong> 施術のBefore/After画像比較や、フォーム確認用の動画をアップロードできます。メディア保存時に自動リサイズ機能も働き、最適な容量で保存します。また、iOS環境を配慮した画像アップロード最適化も備わっています。</li>
-        <li><strong>トレーニング進捗（A院のみ）:</strong> スクワット等の種目別の重量変化グラフや、体組成の推移を視覚的に確認できます。</li>
-      </ul>
-      <div class="screenshot-placeholder">[screenshot: A院カルテ（部位・画像・トレーニング）入力画面のキャプチャ]</div>
+      <!-- ============================================== -->
+      <section id="section-6">
+        <h2>6. メディア・カルテ・トレーニング管理</h2>
+        <p>紙のカルテの煩わしさを排除し、圧倒的な検索性とデータ活用を実現します。</p>
 
-      <h3>4.5. 設定 (Settings)</h3>
-      <p>院の営業時間、曜日別の定休日、提供する施術メニューのマスタ管理などを設定します。</p>
-      <div class="screenshot-placeholder">[screenshot: 設定画面（営業時間やメニュー）のキャプチャ]</div>
+        <h3>6.1 患者一覧・詳細での素早いチェック</h3>
+        <p>患者情報の検索や、スタッフしか見れない「内部メモ」が瞬時に確認できます。</p>
 
-      <h2>5. 患者向け機能</h2>
-      <p>患者様は自身のスマホから手軽に予約を入れたり、過去の施術履歴を確認したりできます。</p>
+        <h3>6.2 カルテ入力（A院プロ版の高度な記録）</h3>
+        <p>片手でサクサク入力できる操作性と、リッチなデータ保存を両立させています。</p>
+        <ul>
+          <li><strong>痛みの部位・施術内容タップ選択：</strong> スマホからでもワンボタンで記録。</li>
+          <li><strong>写真・動画（メディア）の保存：</strong> 姿勢のBefore/After比較や、歩行フォームなどの動画（最大50MBまで）をクラウドでアップロード保存・比較できます。</li>
+        </ul>
 
-      <h3>5.1. 予約フォーム (Reserve)</h3>
-      <p>メニューを選択し、リアルタイムに空いている時間枠から24時間いつでも予約申込が可能です（A院はスタッフ指名も可能）。</p>
-      <div class="screenshot-placeholder">[screenshot: 患者向けWeb予約フォームのキャプチャ]</div>
+        <div class="screenshot-grid">
+          <img src="images/images%3Ass_karte_pro1.png" alt="カルテプロ版" class="screenshot-img">
+          <img src="images/images%3Ass_karte_pro2.png" alt="カルテ一覧" class="screenshot-img">
+        </div>
+        <div class="screenshot-grid">
+          <img src="images/images%3Ass_karte_pro3.png" alt="部位・画像入力" class="screenshot-img">
+          <img src="images/images%3Ass_karte_pro4.png" alt="メディアアップロード" class="screenshot-img">
+        </div>
 
-      <h3>5.2. 患者マイページ (Mypage)</h3>
-      <p>患者様には専用の閲覧URLが自動発行されます。ここから次回の予約確認や、自身のカルテ記録（A院の場合はトレーニング進捗グラフや体組成データ）をチェックできます。</p>
-      <div class="warning-box">
-        <p><strong>検証用マイページリンク（A院 高橋健司 様の例）:</strong><br>
-        <code>/00000000-0000-0000-0000-000000000001/mypage/kenji-takahashi</code></p>
-      </div>
-      <div class="screenshot-placeholder">[screenshot: 患者マイページ画面のキャプチャ]</div>
+        <h3>6.3 トレーニング推移（客単価アップの要）</h3>
+        <p>スクワットなどの重量推移グラフ、体组成データの推移を見ることで、効果を可視化。リピート率向上（離脱防止）の決め手となります。</p>
+        
+        <div class="screenshot-grid">
+          <img src="images/images%3Ass_karte_pro5.png" alt="トレーニンググラフ入力" class="screenshot-img">
+          <img src="images/images%3Ass_karte_pro6.png" alt="フォーム確認と推移" class="screenshot-img">
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <section id="section-7">
+        <h2>7. 強力な自動通知・オリジナルメッセージ機能</h2>
+        <p>設定画面の「通知」タブでプレビューを見ながら、送られるメッセージの内容を設定できます。</p>
+
+        <h3>オリジナルメッセージ（カスタム文言）の差し込み【A院限定】</h3>
+        <p>「明日は初回ですので保険証をお持ちください」「駐車場が工事中のため第2駐車場をご利用ください」など、定型文の最下部に**独自の案内文**を設定し、温かみのあるきめ細かい対応にフルカスタマイズできます。</p>
+
+        <img src="images/images%3Ass_notification.png" alt="通知カスタム設定とプレビュー表示" class="screenshot-img">
+      </section>
+
+      <!-- ============================================== -->
+      <section id="section-8">
+        <h2>8. 患者さま専用ページ機能</h2>
+        <p>エンドユーザーからの見え方を確認できます。</p>
+
+        <h3>スマホ対応・24時間Web予約 ＆ 専用マイページ</h3>
+        <p>患者様には専用マイページURLが発行され、直近の予約とトレーニング履歴を手元で確認できるようになります。予約も「最新の空いている時間枠」だけが表示され、電話のやりとりは完全に不要になります。</p>
+
+        <img src="images/images%3Ass_patient_mypage1.png" alt="患者専用マイページ" class="screenshot-img">
+        <div class="screenshot-grid">
+          <img src="images/images%3Ass_patient_mypage2.png" alt="患者Web予約フォーム" class="screenshot-img">
+          <img src="images/images%3Ass_patient_mypage3.png" alt="予約完了表示" class="screenshot-img">
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <section id="section-9">
+        <h2>9. よくある質問（FAQ）</h2>
+        
+        <div class="faq-item">
+          <div class="faq-q">パソコンに詳しくないスタッフでも操作できますか？</div>
+          <div class="faq-a"><div><strong>はい、ご安心ください。</strong>システムの全ての画面でスマートフォン並みに直感的に操作できるように設計されています。予約の変更もカレンダーのブロックを指で引っ張って移す（ドラッグする）だけです。</div></div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">患者様がWeb予約ボタンを連打して重複することはありませんか？</div>
+          <div class="faq-a"><div><strong>システムが完全に防止します。</strong>予約は「仮受付」というクッションを必ず挟むほか、仮受付の時点でも「同時予約上限」を超えないように裏側で強力な重複防止機能が動作しているため、ダブルブッキングは発生しません。</div></div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">患者様がLINEを使っていなくても大丈夫ですか？</div>
+          <div class="faq-a"><div><strong>メールにも対応しています。</strong>患者様が予約時にメールアドレスを登録していれば、LINEと全く同じ体裁できれいなレイアウトの予約通知・リマインドメールが自動的に送信されます。</div></div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">B院（シンプル版）からA院（プロ版）へのアップグレードは難しいですか？</div>
+          <div class="faq-a"><div><strong>即日切り替えが可能です。</strong>システム裏側の「設定」をオンにするだけで、今まで蓄積した患者データをそのまま引き継いで、メディア保存機能やトレーニンググラフ、スタッフ指名管理を開放することが可能です。</div></div>
+        </div>
+      </section>
+
+      <hr>
+
+      <footer style="text-align: center; color: var(--text-muted); font-size: 0.9rem; padding-bottom: 48px;">
+        <p>&copy; 2026 Chiro-SaaS. All rights reserved.</p>
+        <p>※本マニュアルの画面は開発中のものであり、実際の仕様と一部異なる場合があります。</p>
+      </footer>
 
     </div>
-  </div>
+  </main>
+</div>
+
+<!-- スムーズスクロールのためのスクリプト -->
+<script>
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      document.querySelector(this.getAttribute('href')).scrollIntoView({
+        behavior: 'smooth'
+      });
+    });
+  });
+</script>
+
 </body>
 </html>
