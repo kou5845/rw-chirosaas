@@ -132,6 +132,12 @@ export type PublicReservationState = {
   success?: boolean;
   /** 今回の予約で新規患者として登録された場合 true（完了画面でマイページリンクを表示するために使用） */
   isNewPatient?: boolean;
+  /**
+   * 同テナント内に同じ電話番号の登録済み患者が存在する場合 true。
+   * 別テナントに同じ患者が存在する場合は false（マルチテナント対応）。
+   * この場合は「2回目以降の方」フローへ誘導する。
+   */
+  existingPatient?: boolean;
   errors?: {
     general?:   string;
     name?:      string;
@@ -252,19 +258,9 @@ export async function submitPublicReservation(
     );
 
     if (matched) {
-      patientId = matched.id;
-      // 既存患者にメールが未設定で今回入力された場合は更新
-      if (email && !matched.email) {
-        await prisma.patient.update({
-          where: { id: matched.id },
-          data:  { email },
-        }).catch(() => {
-          // unique 制約違反は無視して続行
-        });
-      }
-      ensurePatientAccessToken(matched.id, tenant.id).catch((e) => {
-        console.error("[reserve/actions] accessToken 自動発行失敗:", e);
-      });
+      // 同テナントに登録済み患者が存在する → 「2回目以降の方」フローへ誘導
+      // ※ 別テナントへの同一患者登録は tenantId フィルタにより無関係（マルチテナント対応）
+      return { existingPatient: true };
 
     } else {
       // Guard 3: 新規患者作成

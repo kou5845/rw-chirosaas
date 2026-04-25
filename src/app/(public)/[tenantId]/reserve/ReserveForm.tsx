@@ -630,6 +630,30 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
         </div>
       )}
 
+      {/* 登録済み患者エラー（同テナント内に同じ電話番号が存在） */}
+      {formState?.existingPatient && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-800">
+                この電話番号はすでに登録されています
+              </p>
+              <p className="text-xs leading-relaxed text-amber-700">
+                入力された電話番号はすでに当院に登録されています。
+                「2回目以降の方」のフローからご予約ください。
+              </p>
+            </div>
+          </div>
+          <a
+            href={`/${tenantSlug}/reserve`}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+          >
+            2回目以降の方はこちら →
+          </a>
+        </div>
+      )}
+
       {/* ── マイページ認証済み: ロック表示 ── */}
       {lockedPatient ? (
         <div className="space-y-3">
