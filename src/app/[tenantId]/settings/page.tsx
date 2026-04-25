@@ -270,8 +270,6 @@ export default async function SettingsPage({ params }: Props) {
         />
         <div className="mt-4">
           <TrainingMetricsForm
-            tenantId={tenant.id}
-            tenantSlug={slug}
             initial={metricsConfig}
           />
         </div>
