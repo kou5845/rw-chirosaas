@@ -70,9 +70,6 @@ export function NewPatientForm({ tenantId, tenantSlug }: Props) {
         </div>
 
         <form action={action} className="space-y-0">
-          {/* hidden fields */}
-          <input type="hidden" name="tenantId"   value={tenantId} />
-          <input type="hidden" name="tenantSlug" value={tenantSlug} />
 
           <div className="divide-y divide-gray-50 px-6">
 

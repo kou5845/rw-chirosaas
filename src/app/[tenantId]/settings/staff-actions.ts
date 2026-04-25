@@ -1,97 +1,90 @@
 "use server";
 
+/**
+ * スタッフ CRUD Server Actions
+ *
+ * CLAUDE.md 規約:
+ *   - tenantId は auth() セッションから取得（FormData 不使用）
+ *   - update/delete 前に { id, tenantId } で所有権確認
+ */
+
 import { prisma } from "@/lib/prisma";
+import { auth }   from "@/auth";
 import { revalidatePath } from "next/cache";
 
-export async function addStaffAction(formData: FormData) {
-  const tenantId = formData.get("tenantId") as string;
-  if (!tenantId) return { error: "セッションが不正です" };
-  const name = formData.get("name") as string;
-  const role = formData.get("role") as string;
+async function getSessionTenant() {
+  const session = await auth();
+  if (!session?.user?.tenantId || !session.user.tenantSlug) return null;
+  return { tenantId: session.user.tenantId, tenantSlug: session.user.tenantSlug };
+}
 
-  if (!name || name.trim() === "") {
-    return { error: "名前は必須です" };
-  }
+export async function addStaffAction(formData: FormData) {
+  // CLAUDE.md 絶対ルール: tenantId はセッションから取得
+  const t = await getSessionTenant();
+  if (!t) return { error: "認証エラーです。再ログインしてください。" };
+
+  const name = (formData.get("name") as string | null)?.trim() ?? "";
+  const role = (formData.get("role") as string | null)?.trim() || null;
+
+  if (!name) return { error: "名前は必須です" };
 
   try {
     await prisma.staff.create({
-      data: {
-        tenantId,
-        name: name.trim(),
-        role: role ? role.trim() : null,
-      },
+      data: { tenantId: t.tenantId, name, role },
     });
-
-    revalidatePath(`/[tenantId]/settings`, "page");
+    revalidatePath(`/${t.tenantSlug}/settings`);
     return { success: true };
-  } catch (error: any) {
-    console.error("Failed to add staff:", error);
+  } catch (e) {
+    console.error("[addStaffAction]", e);
     return { error: "スタッフの追加に失敗しました" };
   }
 }
 
 export async function updateStaffAction(formData: FormData) {
-  const tenantId = formData.get("tenantId") as string;
-  if (!tenantId) return { error: "セッションが不正です" };
-  const id = formData.get("id") as string;
-  const name = formData.get("name") as string;
-  const role = formData.get("role") as string;
+  const t = await getSessionTenant();
+  if (!t) return { error: "認証エラーです。再ログインしてください。" };
 
-  if (!id || !name || name.trim() === "") {
-    return { error: "名前は必須です" };
-  }
+  const id   = (formData.get("id")   as string | null)?.trim() ?? "";
+  const name = (formData.get("name") as string | null)?.trim() ?? "";
+  const role = (formData.get("role") as string | null)?.trim() || null;
+
+  if (!id || !name) return { error: "名前は必須です" };
+
+  // CLAUDE.md 絶対ルール: 操作対象が自テナントのものか確認
+  const staff = await prisma.staff.findFirst({
+    where: { id, tenantId: t.tenantId },
+  });
+  if (!staff) return { error: "スタッフが見つかりません" };
 
   try {
-    // 테넌트 경계 확인
-    const staff = await prisma.staff.findFirst({
-      where: { id, tenantId },
-    });
-    
-    if (!staff) {
-      return { error: "スタッフが見つかりません" };
-    }
-
-    await prisma.staff.update({
-      where: { id },
-      data: {
-        name: name.trim(),
-        role: role ? role.trim() : null,
-      },
-    });
-
-    revalidatePath(`/[tenantId]/settings`, "page");
+    await prisma.staff.update({ where: { id }, data: { name, role } });
+    revalidatePath(`/${t.tenantSlug}/settings`);
     return { success: true };
-  } catch (error: any) {
-    console.error("Failed to update staff:", error);
+  } catch (e) {
+    console.error("[updateStaffAction]", e);
     return { error: "スタッフの更新に失敗しました" };
   }
 }
 
 export async function disableStaffAction(formData: FormData) {
-  const tenantId = formData.get("tenantId") as string;
-  if (!tenantId) return { error: "セッションが不正です" };
-  const id = formData.get("id") as string;
+  const t = await getSessionTenant();
+  if (!t) return { error: "認証エラーです。再ログインしてください。" };
 
+  const id = (formData.get("id") as string | null)?.trim() ?? "";
   if (!id) return { error: "無効なリクエストです" };
 
+  // CLAUDE.md 絶対ルール: 操作対象が自テナントのものか確認
+  const staff = await prisma.staff.findFirst({
+    where: { id, tenantId: t.tenantId },
+  });
+  if (!staff) return { error: "スタッフが見つかりません" };
+
   try {
-    const staff = await prisma.staff.findFirst({
-      where: { id, tenantId },
-    });
-    
-    if (!staff) {
-      return { error: "スタッフが見つかりません" };
-    }
-
-    await prisma.staff.update({
-      where: { id },
-      data: { isActive: false },
-    });
-
-    revalidatePath(`/[tenantId]/settings`, "page");
+    await prisma.staff.update({ where: { id }, data: { isActive: false } });
+    revalidatePath(`/${t.tenantSlug}/settings`);
     return { success: true };
-  } catch (error: any) {
-    console.error("Failed to disable staff:", error);
+  } catch (e) {
+    console.error("[disableStaffAction]", e);
     return { error: "スタッフの無効化に失敗しました" };
   }
 }

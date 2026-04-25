@@ -21,6 +21,7 @@ import { messagingApi } from "@line/bot-sdk";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken, COOKIE_NAME } from "@/lib/mypage-session";
 import { sendSecurityEmail } from "@/lib/email";
+import { escapeHtml } from "@/lib/utils";
 
 export type UpdateProfileState = {
   success?: boolean;
@@ -99,7 +100,7 @@ export async function updatePatientProfile(
       <table style="width:100%;border-collapse:collapse;font-size:14px;">
         <tr>
           <td style="padding:10px 14px;background:#f3f4f6;border-radius:8px;color:#6b7280;width:40%;">新しいメールアドレス</td>
-          <td style="padding:10px 14px;color:#111827;font-weight:600;">${email ?? "（削除）"}</td>
+          <td style="padding:10px 14px;color:#111827;font-weight:600;">${escapeHtml(email ?? "（削除）")}</td>
         </tr>
       </table>
       <p style="margin:16px 0 0;color:#6b7280;font-size:13px;line-height:1.6;">

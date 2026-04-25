@@ -4,11 +4,19 @@
  * 施術マスタ CRUD Server Actions
  *
  * CLAUDE.md 規約:
+ *   - tenantId はセッション由来の値のみ使用（FormData 不使用）
  *   - 全 Prisma クエリに tenantId を含めること（絶対ルール）
  */
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { auth }   from "@/auth";
+
+async function getSessionTenant() {
+  const session = await auth();
+  if (!session?.user?.tenantId || !session.user.tenantSlug) return null;
+  return { tenantId: session.user.tenantId, tenantSlug: session.user.tenantSlug };
+}
 
 export type ServiceFormState = {
   errors?: {
@@ -28,22 +36,22 @@ export async function createService(
   _prev: ServiceFormState,
   formData: FormData,
 ): Promise<ServiceFormState> {
-  const tenantId   = formData.get("tenantId")   as string;
-  const tenantSlug = formData.get("tenantSlug") as string;
-  if (!tenantId || !tenantSlug) return { errors: { general: "テナント情報が不正です。" } };
+  // CLAUDE.md 絶対ルール: tenantId はセッションから取得
+  const t = await getSessionTenant();
+  if (!t) return { errors: { general: "認証エラーです。再ログインしてください。" } };
 
   const parsed = parseServiceForm(formData);
   if ("errors" in parsed) return { errors: parsed.errors };
 
   try {
     await prisma.service.create({
-      data: { tenantId, ...parsed.data },
+      data: { tenantId: t.tenantId, ...parsed.data },
     });
   } catch {
     return { errors: { general: "登録処理中にエラーが発生しました。" } };
   }
 
-  revalidatePath(`/${tenantSlug}/services`);
+  revalidatePath(`/${t.tenantSlug}/services`);
   return { success: true };
 }
 
@@ -53,10 +61,12 @@ export async function updateService(
   _prev: ServiceFormState,
   formData: FormData,
 ): Promise<ServiceFormState> {
-  const tenantId   = formData.get("tenantId")   as string;
-  const tenantSlug = formData.get("tenantSlug") as string;
-  const serviceId  = formData.get("serviceId")  as string;
-  if (!tenantId || !tenantSlug || !serviceId) return { errors: { general: "テナント情報が不正です。" } };
+  // CLAUDE.md 絶対ルール: tenantId はセッションから取得
+  const t = await getSessionTenant();
+  if (!t) return { errors: { general: "認証エラーです。再ログインしてください。" } };
+
+  const serviceId = formData.get("serviceId") as string;
+  if (!serviceId) return { errors: { general: "サービス情報が不正です。" } };
 
   const parsed = parseServiceForm(formData);
   if ("errors" in parsed) return { errors: parsed.errors };
@@ -64,14 +74,14 @@ export async function updateService(
   try {
     // CLAUDE.md 絶対ルール: tenantId フィルタで他テナントへの書き込みを防止
     await prisma.service.updateMany({
-      where: { id: serviceId, tenantId },
+      where: { id: serviceId, tenantId: t.tenantId },
       data:  parsed.data,
     });
   } catch {
     return { errors: { general: "更新処理中にエラーが発生しました。" } };
   }
 
-  revalidatePath(`/${tenantSlug}/services`);
+  revalidatePath(`/${t.tenantSlug}/services`);
   return { success: true };
 }
 
@@ -80,71 +90,79 @@ export async function updateService(
 export async function toggleServiceStatus(
   serviceId:  string,
   isActive:   boolean,
-  tenantId:   string,
-  tenantSlug: string,
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
   try {
     await prisma.service.updateMany({
-      where: { id: serviceId, tenantId }, // CLAUDE.md 絶対ルール
+      where: { id: serviceId, tenantId: t.tenantId }, // CLAUDE.md 絶対ルール
       data:  { isActive },
     });
   } catch {
     return { success: false, error: "状態の更新中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/services`);
+  revalidatePath(`/${t.tenantSlug}/services`);
   return { success: true };
 }
 
 // ── 論理削除（isActive = false）────────────────────────────────
 
 export async function deactivateService(
-  serviceId: string,
-  tenantId:  string,
-  tenantSlug: string,
+  serviceId:  string,
+  _tenantId:  string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
   try {
     await prisma.service.updateMany({
-      where: { id: serviceId, tenantId },
+      where: { id: serviceId, tenantId: t.tenantId },
       data:  { isActive: false },
     });
   } catch {
     return { success: false, error: "削除処理中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/services`);
+  revalidatePath(`/${t.tenantSlug}/services`);
   return { success: true };
 }
 
 // ── 復元（isActive = true）───────────────────────────────────
 
 export async function reactivateService(
-  serviceId: string,
-  tenantId:  string,
-  tenantSlug: string,
+  serviceId:  string,
+  _tenantId:  string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
   try {
     await prisma.service.updateMany({
-      where: { id: serviceId, tenantId },
+      where: { id: serviceId, tenantId: t.tenantId },
       data:  { isActive: true },
     });
   } catch {
     return { success: false, error: "復元処理中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/services`);
+  revalidatePath(`/${t.tenantSlug}/services`);
   return { success: true };
 }
 
 // ── 並び替え ─────────────────────────────────────────────────
 
 export async function reorderServices(
-  items:      { id: string; sortOrder: number }[],
-  tenantId:   string,
-  tenantSlug: string,
+  items:       { id: string; sortOrder: number }[],
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
   try {
     await prisma.$transaction(
       items.map((item) =>
         prisma.service.updateMany({
-          where: { id: item.id, tenantId }, // CLAUDE.md 絶対ルール
+          where: { id: item.id, tenantId: t.tenantId }, // CLAUDE.md 絶対ルール
           data:  { sortOrder: item.sortOrder },
         })
       )
@@ -152,7 +170,7 @@ export async function reorderServices(
   } catch {
     return { success: false, error: "並び替え処理中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/services`);
+  revalidatePath(`/${t.tenantSlug}/services`);
   return { success: true };
 }
 

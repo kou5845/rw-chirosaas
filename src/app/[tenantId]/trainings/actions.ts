@@ -4,11 +4,19 @@
  * トレーニング種目マスタ CRUD Server Actions
  *
  * CLAUDE.md 規約:
+ *   - tenantId はセッション由来の値のみ使用（FormData 不使用）
  *   - 全 Prisma クエリに tenantId を含めること（絶対ルール）
  */
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { auth }   from "@/auth";
+
+async function getSessionTenant() {
+  const session = await auth();
+  if (!session?.user?.tenantId || !session.user.tenantSlug) return null;
+  return { tenantId: session.user.tenantId, tenantSlug: session.user.tenantSlug };
+}
 
 // ============================================================
 // 型定義
@@ -27,20 +35,20 @@ export async function createExercise(
   _prev: ExerciseFormState,
   formData: FormData,
 ): Promise<ExerciseFormState> {
-  const tenantId   = formData.get("tenantId")   as string;
-  const tenantSlug = formData.get("tenantSlug") as string;
-  if (!tenantId || !tenantSlug) return { errors: { general: "テナント情報が不正です。" } };
+  // CLAUDE.md 絶対ルール: tenantId はセッションから取得
+  const t = await getSessionTenant();
+  if (!t) return { errors: { general: "認証エラーです。再ログインしてください。" } };
 
   const parsed = parseExerciseForm(formData);
   if ("errors" in parsed) return { errors: parsed.errors };
 
   try {
-    await prisma.exercise.create({ data: { tenantId, ...parsed.data } });
+    await prisma.exercise.create({ data: { tenantId: t.tenantId, ...parsed.data } });
   } catch {
     return { errors: { general: "登録処理中にエラーが発生しました。" } };
   }
 
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
@@ -48,89 +56,99 @@ export async function updateExercise(
   _prev: ExerciseFormState,
   formData: FormData,
 ): Promise<ExerciseFormState> {
-  const tenantId   = formData.get("tenantId")   as string;
-  const tenantSlug = formData.get("tenantSlug") as string;
+  // CLAUDE.md 絶対ルール: tenantId はセッションから取得
+  const t = await getSessionTenant();
+  if (!t) return { errors: { general: "認証エラーです。再ログインしてください。" } };
+
   const exerciseId = formData.get("exerciseId") as string;
-  if (!tenantId || !tenantSlug || !exerciseId) return { errors: { general: "テナント情報が不正です。" } };
+  if (!exerciseId) return { errors: { general: "種目情報が不正です。" } };
 
   const parsed = parseExerciseForm(formData);
   if ("errors" in parsed) return { errors: parsed.errors };
 
   try {
     await prisma.exercise.updateMany({
-      where: { id: exerciseId, tenantId }, // CLAUDE.md 絶対ルール
+      where: { id: exerciseId, tenantId: t.tenantId }, // CLAUDE.md 絶対ルール
       data:  parsed.data,
     });
   } catch {
     return { errors: { general: "更新処理中にエラーが発生しました。" } };
   }
 
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
 export async function deactivateExercise(
-  exerciseId: string,
-  tenantId:   string,
-  tenantSlug: string,
+  exerciseId:  string,
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
   try {
     await prisma.exercise.updateMany({
-      where: { id: exerciseId, tenantId },
+      where: { id: exerciseId, tenantId: t.tenantId },
       data:  { isActive: false },
     });
   } catch {
     return { success: false, error: "削除処理中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
 export async function reactivateExercise(
-  exerciseId: string,
-  tenantId:   string,
-  tenantSlug: string,
+  exerciseId:  string,
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
   try {
     await prisma.exercise.updateMany({
-      where: { id: exerciseId, tenantId },
+      where: { id: exerciseId, tenantId: t.tenantId },
       data:  { isActive: true },
     });
   } catch {
     return { success: false, error: "復元処理中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
 export async function toggleExerciseStatus(
-  exerciseId: string,
-  isActive:   boolean,
-  tenantId:   string,
-  tenantSlug: string,
+  exerciseId:  string,
+  isActive:    boolean,
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
   try {
     await prisma.exercise.updateMany({
-      where: { id: exerciseId, tenantId }, // CLAUDE.md 絶対ルール
+      where: { id: exerciseId, tenantId: t.tenantId }, // CLAUDE.md 絶対ルール
       data:  { isActive },
     });
   } catch {
     return { success: false, error: "状態の更新中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
 export async function reorderExercises(
-  items:      { id: string; sortOrder: number }[],
-  tenantId:   string,
-  tenantSlug: string,
+  items:       { id: string; sortOrder: number }[],
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
   try {
     await prisma.$transaction(
       items.map((item) =>
         prisma.exercise.updateMany({
-          where: { id: item.id, tenantId }, // CLAUDE.md 絶対ルール
+          where: { id: item.id, tenantId: t.tenantId }, // CLAUDE.md 絶対ルール
           data:  { sortOrder: item.sortOrder },
         })
       )
@@ -138,7 +156,7 @@ export async function reorderExercises(
   } catch {
     return { success: false, error: "並び替え処理中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
@@ -150,93 +168,99 @@ export async function createCategory(
   _prev: CategoryFormState,
   formData: FormData,
 ): Promise<CategoryFormState> {
-  const tenantId   = formData.get("tenantId")   as string;
-  const tenantSlug = formData.get("tenantSlug") as string;
-  const name       = (formData.get("name") as string | null)?.trim() ?? "";
+  // CLAUDE.md 絶対ルール: tenantId はセッションから取得
+  const t = await getSessionTenant();
+  if (!t) return { errors: { general: "認証エラーです。再ログインしてください。" } };
 
-  if (!tenantId || !tenantSlug) return { errors: { general: "テナント情報が不正です。" } };
-  if (!name)                    return { errors: { name: "カテゴリ名は必須です。" } };
-  if (name.length > 64)         return { errors: { name: "64文字以内で入力してください。" } };
+  const name = (formData.get("name") as string | null)?.trim() ?? "";
+  if (!name)            return { errors: { name: "カテゴリ名は必須です。" } };
+  if (name.length > 64) return { errors: { name: "64文字以内で入力してください。" } };
 
   try {
-    // 現在の最大 sortOrder を取得して末尾に追加
     const last = await prisma.exerciseCategory.findFirst({
-      where:   { tenantId },
+      where:   { tenantId: t.tenantId },
       orderBy: { sortOrder: "desc" },
       select:  { sortOrder: true },
     });
     await prisma.exerciseCategory.create({
-      data: { tenantId, name, sortOrder: (last?.sortOrder ?? -10) + 10 },
+      data: { tenantId: t.tenantId, name, sortOrder: (last?.sortOrder ?? -10) + 10 },
     });
   } catch {
     return { errors: { general: "登録処理中にエラーが発生しました。" } };
   }
 
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
 export async function updateCategory(
-  categoryId: string,
-  name:       string,
-  tenantId:   string,
-  tenantSlug: string,
+  categoryId:  string,
+  name:        string,
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
+
   const trimmed = name.trim();
   if (!trimmed) return { success: false, error: "カテゴリ名は必須です。" };
 
   try {
     await prisma.exerciseCategory.updateMany({
-      where: { id: categoryId, tenantId }, // CLAUDE.md 絶対ルール
+      where: { id: categoryId, tenantId: t.tenantId }, // CLAUDE.md 絶対ルール
       data:  { name: trimmed },
     });
-    // category スナップショット文字列も同期（既存互換性）
     await prisma.exercise.updateMany({
-      where: { categoryId, tenantId },
+      where: { categoryId, tenantId: t.tenantId },
       data:  { category: trimmed },
     });
   } catch {
     return { success: false, error: "更新処理中にエラーが発生しました。" };
   }
 
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
 export async function deleteCategory(
-  categoryId: string,
-  tenantId:   string,
-  tenantSlug: string,
+  categoryId:  string,
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
+
   try {
-    // カテゴリに紐づく種目の categoryId を NULL にしてから削除
     await prisma.$transaction([
       prisma.exercise.updateMany({
-        where: { categoryId, tenantId },
+        where: { categoryId, tenantId: t.tenantId },
         data:  { categoryId: null },
       }),
       prisma.exerciseCategory.deleteMany({
-        where: { id: categoryId, tenantId }, // CLAUDE.md 絶対ルール
+        where: { id: categoryId, tenantId: t.tenantId }, // CLAUDE.md 絶対ルール
       }),
     ]);
   } catch {
     return { success: false, error: "削除処理中にエラーが発生しました。" };
   }
 
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 
 export async function reorderCategories(
-  items:      { id: string; sortOrder: number }[],
-  tenantId:   string,
-  tenantSlug: string,
+  items:       { id: string; sortOrder: number }[],
+  _tenantId:   string,
+  _tenantSlug: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await getSessionTenant();
+  if (!t) return { success: false, error: "認証エラーです。" };
+
   try {
     await prisma.$transaction(
       items.map((item) =>
         prisma.exerciseCategory.updateMany({
-          where: { id: item.id, tenantId }, // CLAUDE.md 絶対ルール
+          where: { id: item.id, tenantId: t.tenantId }, // CLAUDE.md 絶対ルール
           data:  { sortOrder: item.sortOrder },
         })
       )
@@ -244,7 +268,7 @@ export async function reorderCategories(
   } catch {
     return { success: false, error: "並び替え処理中にエラーが発生しました。" };
   }
-  revalidatePath(`/${tenantSlug}/trainings`);
+  revalidatePath(`/${t.tenantSlug}/trainings`);
   return { success: true };
 }
 

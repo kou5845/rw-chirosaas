@@ -5,11 +5,12 @@
  *
  * CLAUDE.md 規約:
  *   - 全 Prisma クエリに tenantId を含めること（絶対ルール）
- *   - tenantId はセッション由来（ここでは DB 照合済み値）を使用。リクエストボディからは取得しない
+ *   - tenantId はセッション由来の値のみ使用（FormData 不使用）
  */
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth }   from "@/auth";
 
 export type CreatePatientState = {
   errors?: {
@@ -26,12 +27,13 @@ export async function createPatient(
   _prevState: CreatePatientState,
   formData: FormData
 ): Promise<CreatePatientState> {
-  const tenantId   = formData.get("tenantId")   as string;
-  const tenantSlug = formData.get("tenantSlug") as string;
-
-  if (!tenantId || !tenantSlug) {
-    return { errors: { general: "テナント情報が不正です。" } };
+  // CLAUDE.md 絶対ルール: tenantId はセッションから取得（FormData 不使用）
+  const session = await auth();
+  if (!session?.user?.tenantId || !session.user.tenantSlug) {
+    return { errors: { general: "認証エラーです。再ログインしてください。" } };
   }
+  const tenantId   = session.user.tenantId;
+  const tenantSlug = session.user.tenantSlug;
 
   const displayName  = (formData.get("displayName") as string | null)?.trim() ?? "";
   const nameKana     = (formData.get("nameKana")    as string | null)?.trim() || null;

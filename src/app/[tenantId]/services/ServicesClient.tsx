@@ -341,8 +341,6 @@ function ServiceDialog({
         </div>
 
         <form action={formAction} className="divide-y divide-gray-50 px-6">
-          <input type="hidden" name="tenantId"   value={tenantId} />
-          <input type="hidden" name="tenantSlug" value={tenantSlug} />
           {initial && <input type="hidden" name="serviceId" value={initial.id} />}
 
           {errors?.general && (

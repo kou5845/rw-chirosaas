@@ -10,6 +10,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { sendSecurityEmail } from "@/lib/email";
+import { escapeHtml } from "@/lib/utils";
 
 export type PinResetState = {
   success?: boolean;
@@ -79,7 +80,7 @@ export async function resetPin(
 
   const bodyHtml = `
     <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.7;">
-      ${patient.displayName} 様<br />
+      ${escapeHtml(patient.displayName)} 様<br />
       暗証番号の再発行が完了しました。<br />
       以下の新しい暗証番号でログインしてください。
     </p>
