@@ -110,6 +110,48 @@ const inputCls =
   "placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-medium)] " +
   "focus:border-transparent transition-colors";
 
+// ── 登録済み患者エラーカード ──────────────────────────────────────────
+
+function ExistingPatientCard({
+  tenantSlug,
+  hasPhone,
+  hasEmail,
+}: {
+  tenantSlug: string;
+  hasPhone:   boolean;
+  hasEmail:   boolean;
+}) {
+  const title = hasPhone && hasEmail
+    ? "電話番号・メールアドレスがすでに登録されています"
+    : hasEmail
+      ? "このメールアドレスはすでに登録されています"
+      : "この電話番号はすでに登録されています";
+  const desc = hasPhone && hasEmail
+    ? "入力された電話番号とメールアドレスはすでに当院に登録されています。"
+    : hasEmail
+      ? "入力されたメールアドレスはすでに当院に登録されています。"
+      : "入力された電話番号はすでに当院に登録されています。";
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 space-y-3">
+      <div className="flex items-start gap-2.5">
+        <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-amber-800">{title}</p>
+          <p className="text-xs leading-relaxed text-amber-700">
+            {desc}「2回目以降の方」のフローからご予約ください。
+          </p>
+        </div>
+      </div>
+      <a
+        href={`/${tenantSlug}/reserve`}
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+      >
+        2回目以降の方はこちら →
+      </a>
+    </div>
+  );
+}
+
 // ── ステップインジケーター ────────────────────────────────────────────
 
 function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
@@ -630,28 +672,13 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
         </div>
       )}
 
-      {/* 登録済み患者エラー（同テナント内に同じ電話番号が存在） */}
+      {/* 登録済み患者エラー（同テナント内に同じ電話番号 or メールアドレスが存在） */}
       {formState?.existingPatient && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 space-y-3">
-          <div className="flex items-start gap-2.5">
-            <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-amber-800">
-                この電話番号はすでに登録されています
-              </p>
-              <p className="text-xs leading-relaxed text-amber-700">
-                入力された電話番号はすでに当院に登録されています。
-                「2回目以降の方」のフローからご予約ください。
-              </p>
-            </div>
-          </div>
-          <a
-            href={`/${tenantSlug}/reserve`}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
-          >
-            2回目以降の方はこちら →
-          </a>
-        </div>
+        <ExistingPatientCard
+          tenantSlug={tenantSlug}
+          hasPhone={!!formState.errors?.phone}
+          hasEmail={!!formState.errors?.email}
+        />
       )}
 
       {/* ── マイページ認証済み: ロック表示 ── */}
