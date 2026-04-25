@@ -8,6 +8,7 @@
  */
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { Loader2, AlertCircle, Lock } from "lucide-react";
 import { loginMypage, type LoginState } from "./login-action";
 
@@ -140,7 +141,15 @@ export function MypageLoginForm({
             </button>
           </form>
 
-          <div className="border-t border-gray-50 px-6 py-4">
+          <div className="border-t border-gray-50 px-6 py-4 space-y-2">
+            <div className="text-center">
+              <Link
+                href={`/${tenantSlug}/mypage/pin-reset`}
+                className="text-[11px] text-[var(--brand-dark)] hover:underline"
+              >
+                暗証番号を忘れた方はこちら
+              </Link>
+            </div>
             <p className="text-center text-[11px] text-gray-300">
               ログイン情報はスタッフにお問い合わせください
             </p>
