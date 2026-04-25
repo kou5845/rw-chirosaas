@@ -73,6 +73,7 @@ export async function createReservation(
       name:                   true,
       phone:                  true,
       address:                true,
+      subdomain:              true,
       lineChannelAccessToken: true,
       lineEnabled:            true,
       emailEnabled:           true,
@@ -149,8 +150,12 @@ export async function createReservation(
   // 失敗しても予約作成の成功には影響させない
   const patient = await prisma.patient.findFirst({
     where:  { id: patientId, tenantId },
-    select: { lineUserId: true, displayName: true, email: true },
+    select: { lineUserId: true, displayName: true, email: true, accessToken: true },
   });
+
+  const mypageUrl = patient?.accessToken && tenant.subdomain
+    ? buildMypageUrl(tenant.subdomain, patient.accessToken)
+    : null;
 
   // ── LINE 受付通知 ──
   if (tenant.lineEnabled && patient?.lineUserId) {
@@ -170,6 +175,7 @@ export async function createReservation(
           endAt,
           phone:   tenant.phone,
           address: tenant.address,
+          mypageUrl,
           customMessage: tenant.lineReceiveMsg,
         });
         await client.pushMessage({
@@ -206,6 +212,7 @@ export async function createReservation(
         endAt,
         phone:         tenant.phone,
         address:       tenant.address,
+        mypageUrl,
         customMessage: tenant.emailReceiveMsg,
       });
       console.log(`[reservationService] メール受付通知送信: patientId=${patientId}`);
@@ -484,7 +491,7 @@ export async function rejectReservation(
       startAt:     true,
       endAt:       true,
       patient: {
-        select: { displayName: true, lineUserId: true, email: true },
+        select: { displayName: true, lineUserId: true, email: true, accessToken: true },
       },
     },
   });
@@ -495,7 +502,7 @@ export async function rejectReservation(
 
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
-    select: { name: true, phone: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, lineRejectMsg: true, emailRejectMsg: true },
+    select: { name: true, phone: true, subdomain: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, lineRejectMsg: true, emailRejectMsg: true },
   });
   if (!tenant) {
     return { success: false, error: "テナントが見つかりません。" };
@@ -524,6 +531,10 @@ export async function rejectReservation(
     return { success: false, error: "お断り処理中にエラーが発生しました。" };
   }
 
+  const rejectMypageUrl = appointment.patient.accessToken && tenant.subdomain
+    ? buildMypageUrl(tenant.subdomain, appointment.patient.accessToken)
+    : null;
+
   const notifyArgs = {
     tenantName:  tenant.name,
     patientName: appointment.patient.displayName,
@@ -533,6 +544,7 @@ export async function rejectReservation(
     startAt:     appointment.startAt,
     endAt:       appointment.endAt,
     phone:       tenant.phone,
+    mypageUrl:   rejectMypageUrl,
   };
 
   if (tenant.lineEnabled && appointment.patient.lineUserId) {

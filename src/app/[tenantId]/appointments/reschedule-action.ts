@@ -44,7 +44,7 @@ export async function rescheduleAppointment({
       durationMin: true,
       price:       true,
       patient: {
-        select: { displayName: true, lineUserId: true, email: true },
+        select: { displayName: true, lineUserId: true, email: true, accessToken: true },
       },
     },
   });
@@ -94,7 +94,7 @@ export async function rescheduleAppointment({
   // 変更通知を非同期送信（失敗してもリスケジュール自体は成功扱い）
   const tenantInfo = await prisma.tenant.findUnique({
     where:  { id: tenant.id },
-    select: { name: true, phone: true, address: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailChangeMsg: true, lineChangeMsg: true },
+    select: { name: true, phone: true, address: true, subdomain: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, emailChangeMsg: true, lineChangeMsg: true },
   });
   if (tenantInfo) {
     sendUpdateNotification({

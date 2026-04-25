@@ -11,6 +11,7 @@
 import { messagingApi } from "@line/bot-sdk";
 import { buildUpdateMessage, buildCancellationMessage } from "@/lib/line";
 import { sendUpdateEmail, sendCancellationEmail } from "@/lib/email";
+import { buildMypageUrl } from "@/lib/mypage";
 
 // ── 共通の予約・テナント・患者情報型 ────────────────────────────────
 
@@ -18,6 +19,7 @@ type TenantInfo = {
   name:                   string;
   phone:                  string | null;
   address:                string | null;
+  subdomain?:             string | null;
   lineEnabled:            boolean;
   lineChannelAccessToken: string | null;
   emailEnabled:           boolean;
@@ -26,9 +28,10 @@ type TenantInfo = {
 };
 
 type PatientInfo = {
-  displayName: string;
-  lineUserId:  string | null;
-  email:       string | null;
+  displayName:  string;
+  lineUserId:   string | null;
+  email:        string | null;
+  accessToken?: string | null;
 };
 
 type AppointmentCore = {
@@ -68,6 +71,10 @@ export async function sendUpdateNotification({
   oldStartAt,
   oldEndAt,
 }: SendUpdateNotificationParams): Promise<void> {
+  const mypageUrl = patient.accessToken && tenant.subdomain
+    ? buildMypageUrl(tenant.subdomain, patient.accessToken)
+    : null;
+
   const templateArgs = {
     tenantName:  tenant.name,
     patientName: patient.displayName,
@@ -78,6 +85,7 @@ export async function sendUpdateNotification({
     endAt:       appointment.endAt,
     phone:       tenant.phone,
     address:     tenant.address,
+    mypageUrl,
     oldStartAt,
     oldEndAt,
   };
@@ -113,6 +121,7 @@ export async function sendUpdateNotification({
         endAt:         appointment.endAt,
         phone:         tenant.phone,
         address:       tenant.address,
+        mypageUrl,
         oldStartAt,
         oldEndAt,
         customMessage: tenant.emailChangeMsg,
@@ -141,6 +150,10 @@ export async function sendCancellationNotification({
   patient,
   appointment,
 }: SendCancellationNotificationParams): Promise<void> {
+  const mypageUrl = patient.accessToken && tenant.subdomain
+    ? buildMypageUrl(tenant.subdomain, patient.accessToken)
+    : null;
+
   const templateArgs = {
     tenantName:  tenant.name,
     patientName: patient.displayName,
@@ -151,6 +164,7 @@ export async function sendCancellationNotification({
     endAt:       appointment.endAt,
     phone:       tenant.phone,
     address:     tenant.address,
+    mypageUrl,
   };
 
   // ── LINE キャンセル通知 ──
@@ -184,6 +198,7 @@ export async function sendCancellationNotification({
         endAt:         appointment.endAt,
         phone:         tenant.phone,
         address:       tenant.address,
+        mypageUrl,
       });
       console.log("[notificationService] メールキャンセル通知送信");
     } catch (e) {
