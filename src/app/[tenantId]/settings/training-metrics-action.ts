@@ -10,6 +10,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { auth }   from "@/auth";
 import { type MetricConfigItem, parseMetricsConfig } from "@/lib/training-metrics";
 
 type ActionState = { error?: string; success?: boolean } | null;
@@ -18,32 +19,27 @@ export async function updateTrainingMetrics(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const tenantSlug = formData.get("tenantSlug") as string;
-  const tenantId   = formData.get("tenantId")   as string;
-  const configJson = formData.get("configJson") as string;
-
-  if (!tenantSlug || !tenantId) {
-    return { error: "テナント情報が不正です。" };
+  // CLAUDE.md 絶対ルール: tenantId はセッションから取得（FormData 不使用）
+  const session = await auth();
+  if (!session?.user?.tenantId || !session.user.tenantSlug) {
+    return { error: "認証情報が取得できません。再ログインしてください。" };
   }
+  const tenantId   = session.user.tenantId;
+  const tenantSlug = session.user.tenantSlug;
 
-  // CLAUDE.md 絶対ルール: tenantId で所有者を確認してから更新
-  const existing = await prisma.tenant.findUnique({
-    where:  { id: tenantId },
-    select: { id: true },
-  });
-  if (!existing) return { error: "テナントが見つかりません。" };
+  const configJson = formData.get("configJson") as string;
 
   let config: MetricConfigItem[] = [];
   try {
     const raw = JSON.parse(configJson);
     config = parseMetricsConfig(raw);
-  } catch (e) {
+  } catch {
     return { error: "設定の保存に失敗しました。不正なデータ形式です。" };
   }
 
   try {
     await prisma.tenant.update({
-      where: { id: tenantId },        // CLAUDE.md 絶対ルール
+      where: { id: tenantId },   // CLAUDE.md 絶対ルール: セッション由来の tenantId
       data:  { trainingMetricsConfig: config },
     });
   } catch (e) {

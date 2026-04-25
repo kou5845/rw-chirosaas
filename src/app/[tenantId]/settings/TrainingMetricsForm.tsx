@@ -28,9 +28,7 @@ import { updateTrainingMetrics } from "./training-metrics-action";
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Props = {
-  tenantId:   string;
-  tenantSlug: string;
-  initial:    MetricConfigItem[];
+  initial: MetricConfigItem[];
 };
 
 function SaveButton() {
@@ -129,7 +127,7 @@ function SortableMetricItem({
 // 本体
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function TrainingMetricsForm({ tenantId, tenantSlug, initial }: Props) {
+export function TrainingMetricsForm({ initial }: Props) {
   const [config, setConfig] = useState<MetricConfigItem[]>(initial || []);
   const [state, formAction] = useActionState(updateTrainingMetrics, null);
 
@@ -184,9 +182,7 @@ export function TrainingMetricsForm({ tenantId, tenantSlug, initial }: Props) {
   return (
     <div className="relative">
       <form action={formAction} className="px-6 py-5 space-y-5">
-        {/* hidden */}
-        <input type="hidden" name="tenantId" value={tenantId} />
-        <input type="hidden" name="tenantSlug" value={tenantSlug} />
+        {/* tenantId/tenantSlug はセッションから取得するため hidden input 不要 */}
         <input type="hidden" name="configJson" value={JSON.stringify(config)} />
 
         {/* ヘッダー */}
