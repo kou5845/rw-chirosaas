@@ -373,8 +373,8 @@ export function ReservationEmail({
                       </tr>
                     )}
 
-                    {/* ── マイページリンク（confirmation / reminder のみ）── */}
-                    {mypageUrl && (isConfirmation || isReminder) && (
+                    {/* ── マイページリンク（accessToken 保有患者のみ）── */}
+                    {mypageUrl && (
                       <tr>
                         <td style={{ padding: "0 32px 24px" }}>
                           <table width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: "#EFF6FF", borderRadius: 10, border: "1px solid #BFDBFE", overflow: "hidden" }}>
