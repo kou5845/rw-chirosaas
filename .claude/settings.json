@@ -9,7 +9,6 @@
       "Bash(chmod 777 *)",
       "Bash(curl *)",
       "Bash(wget *)",
-      "Bash(git push *)",
       "Read(.env)",
       "Read(.env.local)",
       "Read(.env.*)",
