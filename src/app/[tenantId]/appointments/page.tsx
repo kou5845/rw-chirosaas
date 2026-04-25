@@ -18,6 +18,7 @@ import {
   Inbox,
   CalendarDays,
   List,
+  XCircle,
 } from "lucide-react";
 import {
   startOfWeek,
@@ -41,7 +42,7 @@ type Props = {
   searchParams: Promise<{ view?: string; tab?: string; week?: string }>;
 };
 
-type Tab = "pending" | "confirmed" | "archive";
+type Tab = "pending" | "confirmed" | "archive" | "rejected";
 
 // ── 日時フォーマット（ビュー切替URLで使用）──────────────────────
 
@@ -52,7 +53,8 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   const isWeekView = view !== "list";
   const activeTab: Tab =
     tab === "confirmed" ? "confirmed" :
-    tab === "archive"   ? "archive"   : "pending";
+    tab === "archive"   ? "archive"   :
+    tab === "rejected"  ? "rejected"  : "pending";
 
   // ── テナント解決（営業時間・昼休みも取得）────────────────────────
   const tenant = await prisma.tenant.findUnique({
@@ -182,6 +184,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   }>>> = [];
   let confirmedCount = 0;
   let archiveCount   = 0;
+  let rejectedCount  = 0;
 
   if (!isWeekView) {
     // endAt は @db.Timestamptz（UTC保存）。new Date() も UTC のため、
@@ -190,7 +193,8 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
 
     // 「確定済み」カウント: confirmed かつ endAt が現在より未来
     // 「完了・過去」カウント: completed/cancelled/no_show + 終了済みの confirmed
-    [confirmedCount, archiveCount] = await Promise.all([
+    // 「お断り済み」カウント: rejected のみ
+    [confirmedCount, archiveCount, rejectedCount] = await Promise.all([
       prisma.appointment.count({
         where: { tenantId: tenant.id, status: "confirmed", endAt: { gt: now } },
       }),
@@ -202,6 +206,9 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
             { status: "confirmed", endAt: { lte: now } },
           ],
         },
+      }),
+      prisma.appointment.count({
+        where: { tenantId: tenant.id, status: "rejected" },
       }),
     ]);
 
@@ -217,6 +224,12 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
         where:   { tenantId: tenant.id, status: "confirmed", endAt: { gt: now } },
         include: { patient: { select: { id: true, displayName: true } }, staff: { select: { name: true } } },
         orderBy: { startAt: "asc" },
+      });
+    } else if (activeTab === "rejected") {
+      listAppointments = await prisma.appointment.findMany({
+        where:   { tenantId: tenant.id, status: "rejected" },
+        include: { patient: { select: { id: true, displayName: true } }, staff: { select: { name: true } } },
+        orderBy: { startAt: "desc" },
       });
     } else {
       // 完了・過去: completed/cancelled/no_show + 終了済みの confirmed
@@ -317,6 +330,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
               { key: "pending"   as Tab, label: "承認待ち",   count: pendingCount,   Icon: Clock },
               { key: "confirmed" as Tab, label: "確定済み",   count: confirmedCount, Icon: CheckCircle2 },
               { key: "archive"   as Tab, label: "完了・過去", count: archiveCount,   Icon: Archive },
+              { key: "rejected"  as Tab, label: "お断り済み", count: rejectedCount,  Icon: XCircle },
             ]).map(({ key, label, count, Icon }) => {
               const isActive = activeTab === key;
               const isAlert  = key === "pending" && count > 0;
@@ -329,7 +343,9 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
                     isActive
                       ? isAlert
                         ? "bg-amber-50 text-amber-700 shadow-sm"
-                        : "bg-[var(--brand-bg)] text-[var(--brand-dark)] shadow-sm"
+                        : key === "rejected"
+                          ? "bg-red-50 text-red-700 shadow-sm"
+                          : "bg-[var(--brand-bg)] text-[var(--brand-dark)] shadow-sm"
                       : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                   )}
                 >
@@ -341,7 +357,9 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
                       isActive
                         ? isAlert
                           ? "bg-amber-100 text-amber-800"
-                          : "bg-[var(--brand-light)] text-[var(--brand-darker)]"
+                          : key === "rejected"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-[var(--brand-light)] text-[var(--brand-darker)]"
                         : "bg-gray-100 text-gray-500"
                     )}>
                       {count}
@@ -360,6 +378,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
                 {activeTab === "pending"   && "承認待ちの予約はありません"}
                 {activeTab === "confirmed" && "確定済みの予約はありません"}
                 {activeTab === "archive"   && "完了・過去の予約はありません"}
+                {activeTab === "rejected"  && "お断りした予約はありません"}
               </p>
               {activeTab === "pending" && (
                 <p className="mt-1 text-xs text-gray-300">
