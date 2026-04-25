@@ -17,6 +17,7 @@ import { messagingApi } from "@line/bot-sdk";
 import { buildReceptionMessage, buildConfirmationMessage, buildRejectionMessage } from "@/lib/line";
 import { sendReservationEmail, sendRejectionEmail, sendSecurityEmail } from "@/lib/email";
 import { ensurePatientAccessToken, buildMypageUrl } from "@/lib/mypage";
+import { escapeHtml } from "@/lib/utils";
 
 // ── 型定義 ──────────────────────────────────────────────────────────
 
@@ -250,12 +251,12 @@ export async function createReservation(
       <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:20px;margin-bottom:4px;">
         ${tenant.phone ? `<tr>
           <td style="padding:10px 14px;background:#f3f4f6;border-radius:${tenant.address ? "8px 8px 0 0" : "8px"};color:#6b7280;width:40%;white-space:nowrap;">📞 電話番号</td>
-          <td style="padding:10px 14px;color:#111827;font-weight:600;">${tenant.phone}</td>
+          <td style="padding:10px 14px;color:#111827;font-weight:600;">${escapeHtml(tenant.phone)}</td>
         </tr>` : ""}
         ${tenant.address ? `<tr>
           <td style="padding:10px 14px;background:#f3f4f6;border-radius:${tenant.phone ? "0 0 8px 8px" : "8px"};color:#6b7280;">📍 住所</td>
           <td style="padding:10px 14px;color:#111827;">
-            ${tenant.address}<br />
+            ${escapeHtml(tenant.address)}<br />
             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.address ?? "")}" style="color:#5BBAC4;font-size:13px;">Google マップで見る →</a>
           </td>
         </tr>` : ""}

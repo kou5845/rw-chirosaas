@@ -22,6 +22,12 @@ function getRedis(): Redis | null {
   const url   = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
+    if (process.env.NODE_ENV === "production") {
+      // 本番環境で Upstash 未設定はセキュリティポリシー違反
+      throw new Error(
+        "[rate-limit] 本番環境では UPSTASH_REDIS_REST_URL と UPSTASH_REDIS_REST_TOKEN の設定が必須です。"
+      );
+    }
     console.warn(
       "[rate-limit] UPSTASH_REDIS_REST_URL または UPSTASH_REDIS_REST_TOKEN が未設定です。" +
       "レートリミットはスキップされます（開発環境フォールバック）。"

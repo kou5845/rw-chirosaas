@@ -417,8 +417,6 @@ function ExerciseDialog({
         </div>
 
         <form action={formAction} className="divide-y divide-gray-50 px-6">
-          <input type="hidden" name="tenantId"   value={tenantId} />
-          <input type="hidden" name="tenantSlug" value={tenantSlug} />
           {initial && <input type="hidden" name="exerciseId" value={initial.id} />}
           {/* カテゴリ名スナップショット（後方互換） */}
           <input type="hidden" name="category" value={selectedCat?.name ?? ""} />
@@ -728,8 +726,6 @@ function CategoryManagerModal({
           <div className="border-t border-gray-100 px-4 py-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">カテゴリを追加</p>
             <form ref={addFormRef} action={addAction} className="flex items-start gap-2">
-              <input type="hidden" name="tenantId"   value={tenantId} />
-              <input type="hidden" name="tenantSlug" value={tenantSlug} />
               <div className="flex-1">
                 <input
                   name="name"
