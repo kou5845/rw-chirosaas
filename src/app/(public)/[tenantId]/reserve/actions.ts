@@ -253,14 +253,23 @@ export async function submitPublicReservation(
       where:  { tenantId: tenant.id, isActive: true },
       select: { id: true, phone: true, email: true },
     });
-    const matched = allPatients.find(
+    const matchedByPhone = allPatients.find(
       (p) => p.phone && p.phone.replace(/[\-\s]/g, "") === normalizedInput
     );
+    const matchedByEmail = email
+      ? allPatients.find((p) => p.email && p.email.toLowerCase() === email.toLowerCase())
+      : undefined;
 
-    if (matched) {
+    if (matchedByPhone || matchedByEmail) {
       // 同テナントに登録済み患者が存在する → 「2回目以降の方」フローへ誘導
       // ※ 別テナントへの同一患者登録は tenantId フィルタにより無関係（マルチテナント対応）
-      return { existingPatient: true };
+      return {
+        existingPatient: true,
+        errors: {
+          ...(matchedByPhone ? { phone: "この電話番号はすでに登録されています。" } : {}),
+          ...(matchedByEmail ? { email: "このメールアドレスはすでに登録されています。" } : {}),
+        },
+      };
 
     } else {
       // Guard 3: 新規患者作成
