@@ -83,3 +83,15 @@ export async function logoutMypage(tenantSlug: string): Promise<void> {
   });
   redirect(`/${tenantSlug}/mypage/login`);
 }
+
+/** 削除済み患者のセッション Cookie を無効化する（リダイレクトループ防止） */
+export async function clearStaleSession(tenantSlug: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(COOKIE_NAME, "", {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge:   0,
+    path:     `/${tenantSlug}/mypage`,
+  });
+}
