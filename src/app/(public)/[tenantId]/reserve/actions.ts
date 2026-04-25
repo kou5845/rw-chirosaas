@@ -130,6 +130,8 @@ export async function checkPatientMatch(
 
 export type PublicReservationState = {
   success?: boolean;
+  /** 今回の予約で新規患者として登録された場合 true（完了画面でマイページリンクを表示するために使用） */
+  isNewPatient?: boolean;
   errors?: {
     general?:   string;
     name?:      string;
@@ -318,5 +320,5 @@ export async function submitPublicReservation(
     return { errors: { general: result.error } };
   }
 
-  return { success: true };
+  return { success: true, isNewPatient };
 }
