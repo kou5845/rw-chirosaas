@@ -382,6 +382,17 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
           </div>
         )}
 
+        {/* マイページリンク（マイページから遷移した既存患者のみ表示） */}
+        {lockedPatient && (
+          <a
+            href={`/${tenantSlug}/mypage`}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-bg)] py-3.5 text-sm font-semibold text-[var(--brand-dark)] transition-colors hover:bg-[var(--brand-light)] active:bg-[var(--brand-light)]"
+          >
+            <CalendarDays size={15} />
+            マイページで予約を確認する
+          </a>
+        )}
+
         <button
           onClick={() => {
             setSelectedDate("");
