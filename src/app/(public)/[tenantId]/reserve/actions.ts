@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import { createReservation } from "@/services/reservationService";
 import { ensurePatientAccessToken } from "@/lib/mypage";
+import { hashPin } from "@/lib/pin";
 
 // ── 利用可能なタイムスロット取得 ─────────────────────────────────────
 
@@ -84,8 +85,8 @@ export async function getAvailableSlots(
 export type PatientCheckStatus = "matched" | "name_mismatch" | "not_found";
 
 export type PatientCheckResult = {
-  status:          PatientCheckStatus;
-  registeredName?: string;
+  status: PatientCheckStatus;
+  // registeredName は削除（ユーザー列挙 / PII 漏洩防止）
 };
 
 /**
@@ -118,9 +119,10 @@ export async function checkPatientMatch(
   if (!matched) return { status: "not_found" };
 
   // 名前の正規化比較（スペース除去・小文字化）
+  // registeredName は返さない（ユーザー列挙 / PII 漏洩防止）
   const norm = (s: string) => s.replace(/[\s　]/g, "").toLowerCase();
   if (norm(name) !== norm(matched.displayName ?? "")) {
-    return { status: "name_mismatch", registeredName: matched.displayName ?? undefined };
+    return { status: "name_mismatch" };
   }
 
   return { status: "matched" };
@@ -262,14 +264,8 @@ export async function submitPublicReservation(
 
     if (matchedByPhone || matchedByEmail) {
       // 同テナントに登録済み患者が存在する → 「2回目以降の方」フローへ誘導
-      // ※ 別テナントへの同一患者登録は tenantId フィルタにより無関係（マルチテナント対応）
-      return {
-        existingPatient: true,
-        errors: {
-          ...(matchedByPhone ? { phone: "この電話番号はすでに登録されています。" } : {}),
-          ...(matchedByEmail ? { email: "このメールアドレスはすでに登録されています。" } : {}),
-        },
-      };
+      // ※ どちらのフィールドが一致したかは返さない（ユーザー列挙防止）
+      return { existingPatient: true };
 
     } else {
       // Guard 3: 新規患者作成
@@ -280,9 +276,10 @@ export async function submitPublicReservation(
       const d = parseInt(birthDateRaw.slice(6, 8), 10);
       const birthDate = new Date(Date.UTC(y, m - 1, d));
 
-      // 4桁のランダム暗証番号を生成（1000〜9999）
-      const accessPin = String(Math.floor(1000 + Math.random() * 9000));
-      newPatientPin   = accessPin;
+      // 4桁のランダム暗証番号を生成してハッシュ化（1000〜9999）
+      const rawPin    = String(Math.floor(1000 + Math.random() * 9000));
+      newPatientPin   = rawPin; // メール通知用に平文を保持（ハッシュは保存しない）
+      const accessPin = await hashPin(rawPin);
 
       const created = await prisma.patient.create({
         data: {
@@ -292,7 +289,7 @@ export async function submitPublicReservation(
           phone:       phone,
           email:       email ?? undefined,
           birthDate:   birthDate,
-          accessPin:   accessPin,
+          accessPin,   // bcrypt ハッシュ
           accessToken: crypto.randomUUID(),
         },
       });

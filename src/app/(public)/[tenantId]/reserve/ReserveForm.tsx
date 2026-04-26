@@ -50,8 +50,7 @@ export type LockedPatient = {
 };
 
 type WarningState = {
-  type:            "not_found" | "name_mismatch";
-  registeredName?: string;
+  type: "not_found" | "name_mismatch";
 };
 
 type Props = {
@@ -112,33 +111,17 @@ const inputCls =
 
 // ── 登録済み患者エラーカード ──────────────────────────────────────────
 
-function ExistingPatientCard({
-  tenantSlug,
-  hasPhone,
-  hasEmail,
-}: {
-  tenantSlug: string;
-  hasPhone:   boolean;
-  hasEmail:   boolean;
-}) {
-  const title = hasPhone && hasEmail
-    ? "電話番号・メールアドレスがすでに登録されています"
-    : hasEmail
-      ? "このメールアドレスはすでに登録されています"
-      : "この電話番号はすでに登録されています";
-  const desc = hasPhone && hasEmail
-    ? "入力された電話番号とメールアドレスはすでに当院に登録されています。"
-    : hasEmail
-      ? "入力されたメールアドレスはすでに当院に登録されています。"
-      : "入力された電話番号はすでに当院に登録されています。";
+function ExistingPatientCard({ tenantSlug }: { tenantSlug: string }) {
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 space-y-3">
       <div className="flex items-start gap-2.5">
         <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-amber-800">{title}</p>
+          <p className="text-sm font-semibold text-amber-800">
+            すでにご登録済みのお客様です
+          </p>
           <p className="text-xs leading-relaxed text-amber-700">
-            {desc}「2回目以降の方」のフローからご予約ください。
+            「2回目以降の方」のフローからご予約ください。
           </p>
         </div>
       </div>
@@ -268,7 +251,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
         formAction(fd);
       } else {
         pendingFdRef.current = fd;
-        setWarningState({ type: result.status, registeredName: result.registeredName });
+        setWarningState({ type: result.status });
       }
     } finally {
       setIsChecking(false);
@@ -674,11 +657,7 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
 
       {/* 登録済み患者エラー（同テナント内に同じ電話番号 or メールアドレスが存在） */}
       {formState?.existingPatient && (
-        <ExistingPatientCard
-          tenantSlug={tenantSlug}
-          hasPhone={!!formState.errors?.phone}
-          hasEmail={!!formState.errors?.email}
-        />
+        <ExistingPatientCard tenantSlug={tenantSlug} />
       )}
 
       {/* ── マイページ認証済み: ロック表示 ── */}
@@ -890,9 +869,8 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
                 </p>
               ) : (
                 <p className="text-xs text-amber-700 leading-relaxed">
-                  登録されているお名前は
-                  <span className="mx-0.5 font-semibold">「{warningState.registeredName}」</span>様です。<br />
-                  入力されたお名前で続けますか？
+                  入力されたお名前が登録情報と異なります。<br />
+                  お名前を修正するか、このまま続けますか？
                 </p>
               )}
             </div>

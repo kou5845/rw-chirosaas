@@ -31,7 +31,7 @@
     "date-fns": "^4.1.0",
     "heic2any": "^0.0.4",
     "lucide-react": "^1.7.0",
-    "next": "16.2.2",
+    "next": "16.2.4",
     "next-auth": "5.0.0-beta.30",
     "nodemailer": "^8.0.5",
     "pg": "^8.20.0",
@@ -55,7 +55,7 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.2",
+    "eslint-config-next": "16.2.4",
     "prisma": "^7.6.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
@@ -68,6 +68,11 @@
       "bcrypt",
       "esbuild",
       "prisma"
-    ]
+    ],
+    "overrides": {
+      "hono": ">=4.12.12",
+      "@hono/node-server": ">=1.19.13",
+      "uuid": ">=10.0.0"
+    }
   }
 }
