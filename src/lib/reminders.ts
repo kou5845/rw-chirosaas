@@ -76,6 +76,7 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
           emailEnabled:           true,
           emailReminderMsg:       true,
           lineReminderMsg:        true,
+          lineFriendUrl:          true,
         },
       },
       patient: {
@@ -189,6 +190,7 @@ export async function sendPendingReminders(): Promise<ReminderResult> {
           address:       tenant.address,
           mypageUrl,
           customMessage: tenant.emailReminderMsg,
+          lineFriendUrl: tenant.lineFriendUrl,
         });
         emailSent = true;
         console.log(
