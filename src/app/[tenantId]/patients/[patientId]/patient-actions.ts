@@ -12,6 +12,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hashPin, decryptPin, isEncryptedPin } from "@/lib/pin";
+import { sendSecurityEmail } from "@/lib/email";
+import { buildMypageUrl } from "@/lib/mypage";
+import { escapeHtml } from "@/lib/utils";
 
 // ── 患者更新 ─────────────────────────────────────────────────────────
 
@@ -262,18 +265,25 @@ export type RegeneratePinResult =
 
 /**
  * スタッフが患者の暗証番号を再発行する。
- * 新しい4桁PINをbcryptハッシュ化してDBに保存し、平文（一度限り）を返す。
+ * 新しい4桁PINをハッシュ化してDBに保存し、平文（一度限り）を返す。
+ * 患者にメールアドレスが登録されている場合は通知メールを送信する。
  */
 export async function regeneratePin(
   patientId:  string,
   tenantId:   string,
   tenantSlug: string,
 ): Promise<RegeneratePinResult> {
-  const existing = await prisma.patient.findFirst({
-    where:  { id: patientId, tenantId },
-    select: { id: true },
-  });
-  if (!existing) {
+  const [patient, tenant] = await Promise.all([
+    prisma.patient.findFirst({
+      where:  { id: patientId, tenantId },
+      select: { id: true, displayName: true, email: true, birthDate: true, accessToken: true },
+    }),
+    prisma.tenant.findUnique({
+      where:  { id: tenantId },
+      select: { name: true, subdomain: true },
+    }),
+  ]);
+  if (!patient || !tenant) {
     return { success: false, error: "患者が見つかりません。" };
   }
 
@@ -288,6 +298,55 @@ export async function regeneratePin(
   } catch (e) {
     console.error("[regeneratePin] DB error:", e);
     return { success: false, error: "PIN の再発行に失敗しました。" };
+  }
+
+  // メール通知（患者にメールアドレスが登録されている場合のみ）
+  if (patient.email && patient.birthDate) {
+    const bd = patient.birthDate;
+    const birthDateFormatted =
+      `${bd.getFullYear()}${String(bd.getMonth() + 1).padStart(2, "0")}${String(bd.getDate()).padStart(2, "0")}`;
+    const loginUrl = tenant.subdomain
+      ? `${process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? ""}/${tenant.subdomain}/mypage/login`
+      : null;
+    const mypageUrl = patient.accessToken && tenant.subdomain
+      ? buildMypageUrl(tenant.subdomain, patient.accessToken)
+      : null;
+
+    const bodyHtml = `
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.7;">
+        ${escapeHtml(patient.displayName)} 様<br />
+        スタッフにより暗証番号（PASS）が再発行されました。<br />
+        新しいログイン情報は以下の通りです。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">
+        <tr>
+          <td style="padding:10px 14px;background:#f3f4f6;border-radius:8px 8px 0 0;color:#6b7280;width:50%;">ログインID（生年月日）</td>
+          <td style="padding:10px 14px;color:#111827;font-weight:600;font-family:monospace;">${birthDateFormatted}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px;background:#f3f4f6;border-radius:0 0 8px 8px;color:#6b7280;">新しい暗証番号（PASS）</td>
+          <td style="padding:10px 14px;color:#111827;font-weight:700;font-size:20px;letter-spacing:0.25em;font-family:monospace;">${rawPin}</td>
+        </tr>
+      </table>
+      ${loginUrl ? `
+      <a href="${loginUrl}" style="display:inline-block;padding:10px 20px;background:#5BBAC4;color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;margin-bottom:16px;">
+        マイページへログイン →
+      </a>` : ""}
+      ${mypageUrl ? `
+      <p style="margin:0 0 8px;color:#374151;font-size:13px;">
+        ログイン後はマイページで予約履歴や登録情報をご確認いただけます。
+      </p>` : ""}
+      <p style="margin:16px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">
+        ※ 暗証番号は大切に保管してください。<br />
+        ※ 本メールに心当たりがない場合はお手数ですが当院までご連絡ください。
+      </p>`;
+
+    sendSecurityEmail({
+      to:         patient.email,
+      subject:    "【重要】暗証番号（PASS）再発行のお知らせ",
+      tenantName: tenant.name,
+      bodyHtml,
+    }).catch((e) => console.error("[regeneratePin] メール送信失敗:", e));
   }
 
   revalidatePath(`/${tenantSlug}/patients/${patientId}`);
