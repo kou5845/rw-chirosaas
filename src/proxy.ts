@@ -63,17 +63,22 @@ type RateLimitRule = {
   label:   string;
 };
 
-function getRateLimitRule(pathname: string): RateLimitRule | null {
-  if (pathname.endsWith("/mypage/login"))     return { limiter: loginRatelimit,    label: "login" };
-  if (pathname.endsWith("/mypage/pin-reset")) return { limiter: pinResetRatelimit, label: "pin-reset" };
-  if (/\/reserve(\/.*)?$/.test(pathname))    return { limiter: reserveRatelimit,   label: "reserve" };
+function getRateLimitRule(req: NextRequest): RateLimitRule | null {
+  const { pathname } = req.nextUrl;
+  const isPost = req.method === "POST";
+
+  // ログイン・PIN再発行: POST のみ（GET はフォームページ表示なのでスキップ）
+  if (isPost && pathname.endsWith("/mypage/login"))     return { limiter: loginRatelimit,    label: "login" };
+  if (isPost && pathname.endsWith("/mypage/pin-reset")) return { limiter: pinResetRatelimit, label: "pin-reset" };
+  // 予約作成: POST のみ（GET はカレンダー・スロット閲覧なのでスキップ）
+  if (isPost && /\/reserve(\/.*)?$/.test(pathname))    return { limiter: reserveRatelimit,  label: "reserve" };
   return null;
 }
 
 async function applyRateLimit(req: NextRequest): Promise<NextResponse | null> {
   if (!isRedisAvailable()) return null;
 
-  const rule = getRateLimitRule(req.nextUrl.pathname);
+  const rule = getRateLimitRule(req);
   if (!rule) return null;
 
   const key = `${getClientIp(req)}:${rule.label}`;
