@@ -80,6 +80,7 @@ export async function createReservation(
       emailEnabled:           true,
       emailReceiveMsg:        true,
       lineReceiveMsg:         true,
+      lineFriendUrl:          true,
     },
   });
   if (!tenant) {
@@ -174,10 +175,11 @@ export async function createReservation(
           price,
           startAt,
           endAt,
-          phone:   tenant.phone,
-          address: tenant.address,
+          phone:         tenant.phone,
+          address:       tenant.address,
           mypageUrl,
           customMessage: tenant.lineReceiveMsg,
+          lineFriendUrl: tenant.lineFriendUrl,
         });
         await client.pushMessage({
           to:       patient.lineUserId,
@@ -215,6 +217,7 @@ export async function createReservation(
         address:       tenant.address,
         mypageUrl,
         customMessage: tenant.emailReceiveMsg,
+        lineFriendUrl: tenant.lineFriendUrl,
       });
       console.log(`[reservationService] メール受付通知送信: patientId=${patientId}`);
     } catch (e) {
@@ -260,6 +263,20 @@ export async function createReservation(
             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.address ?? "")}" style="color:#5BBAC4;font-size:13px;">Google マップで見る →</a>
           </td>
         </tr>` : ""}
+      </table>` : ""}
+      ${tenant.lineFriendUrl ? `
+      <table style="width:100%;border-collapse:collapse;margin-top:20px;">
+        <tr>
+          <td style="background:#F0FFF4;border:1px solid #BBF7D0;border-radius:10px;padding:14px 16px;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#15803D;">💚 LINE公式アカウント</p>
+            <p style="margin:0 0 10px;font-size:12px;color:#374151;line-height:1.6;">
+              友だち追加でお得なお知らせや最新情報をLINEでお届けします。
+            </p>
+            <a href="${tenant.lineFriendUrl}" style="display:inline-block;padding:8px 16px;background:#06C755;color:#fff;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;">
+              友だち追加する →
+            </a>
+          </td>
+        </tr>
       </table>` : ""}
       <p style="margin:16px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">
         ※ 暗証番号はスタッフにお伝えすることで変更できます。<br />
@@ -339,7 +356,7 @@ export async function updateReservationStatus(
 
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
-    select: { name: true, phone: true, address: true, subdomain: true, lineChannelAccessToken: true, lineEnabled: true, emailEnabled: true, emailConfirmMsg: true, lineConfirmMsg: true },
+    select: { name: true, phone: true, address: true, subdomain: true, lineChannelAccessToken: true, lineEnabled: true, emailEnabled: true, emailConfirmMsg: true, lineConfirmMsg: true, lineFriendUrl: true },
   });
   if (!tenant) {
     return { success: false, error: "テナントが見つかりません。" };
@@ -409,6 +426,7 @@ export async function updateReservationStatus(
           address:       tenant.address,
           mypageUrl,
           customMessage: tenant.lineConfirmMsg,
+          lineFriendUrl: tenant.lineFriendUrl,
         });
         await client.pushMessage({
           to:       appointment.patient.lineUserId,
@@ -447,6 +465,7 @@ export async function updateReservationStatus(
         address:       tenant.address,
         mypageUrl,
         customMessage: tenant.emailConfirmMsg,
+        lineFriendUrl: tenant.lineFriendUrl,
       });
       console.log(`[reservationService] メール確定通知送信: appointmentId=${appointmentId}`);
     } catch (e) {
@@ -503,7 +522,7 @@ export async function rejectReservation(
 
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
-    select: { name: true, phone: true, subdomain: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, lineRejectMsg: true, emailRejectMsg: true },
+    select: { name: true, phone: true, subdomain: true, lineEnabled: true, lineChannelAccessToken: true, emailEnabled: true, lineRejectMsg: true, emailRejectMsg: true, lineFriendUrl: true },
   });
   if (!tenant) {
     return { success: false, error: "テナントが見つかりません。" };
@@ -555,7 +574,7 @@ export async function rejectReservation(
         const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
         await client.pushMessage({
           to:       appointment.patient.lineUserId,
-          messages: [{ type: "text", text: buildRejectionMessage({ ...notifyArgs, customMessage: tenant.lineRejectMsg }) }],
+          messages: [{ type: "text", text: buildRejectionMessage({ ...notifyArgs, customMessage: tenant.lineRejectMsg, lineFriendUrl: tenant.lineFriendUrl }) }],
         });
       }
     } catch (e) {
@@ -570,6 +589,7 @@ export async function rejectReservation(
         ...notifyArgs,
         address:       null,
         customMessage: tenant.emailRejectMsg,
+        lineFriendUrl: tenant.lineFriendUrl,
       });
     } catch (e) {
       console.error("[reservationService] メールお断り送信エラー:", e);
