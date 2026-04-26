@@ -25,6 +25,7 @@ import { AppointmentSection } from "./AppointmentSection";
 import { PatientActions } from "./PatientActions";
 import { MypageShareSection } from "./MypageShareSection";
 import { KarteSection, type KarteForDisplay } from "./KarteSection";
+import { PinDisplay } from "./PinDisplay";
 import { parseMetricsConfig, type BodyCompDataPoint } from "@/lib/training-metrics";
 
 type Props = {
@@ -422,14 +423,12 @@ export default async function PatientDetailPage({ params }: Props) {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center justify-between rounded-xl bg-white border border-[var(--brand-border)] px-4 py-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">PASS（暗証番号）</p>
-                  <p className="mt-0.5 font-mono text-lg font-bold tracking-[0.3em] text-[var(--brand-dark)]">
-                    {patient.accessPin ?? <span className="text-sm font-normal text-gray-300">未設定</span>}
-                  </p>
-                </div>
-              </div>
+              <PinDisplay
+                patientId={patient.id}
+                tenantId={tenant.id}
+                tenantSlug={slug}
+                accessPin={patient.accessPin}
+              />
               <p className="text-[10px] text-gray-400 px-0.5">
                 上記をお伝えすると患者様がマイページにログインできます
               </p>

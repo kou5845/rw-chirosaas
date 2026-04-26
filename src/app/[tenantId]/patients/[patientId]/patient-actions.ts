@@ -254,6 +254,46 @@ export async function generateMypageToken(
   return { success: true, token };
 }
 
+// ── PIN 再発行 ────────────────────────────────────────────────────────
+
+export type RegeneratePinResult =
+  | { success: true;  pin: string }
+  | { success: false; error: string };
+
+/**
+ * スタッフが患者の暗証番号を再発行する。
+ * 新しい4桁PINをbcryptハッシュ化してDBに保存し、平文（一度限り）を返す。
+ */
+export async function regeneratePin(
+  patientId:  string,
+  tenantId:   string,
+  tenantSlug: string,
+): Promise<RegeneratePinResult> {
+  const existing = await prisma.patient.findFirst({
+    where:  { id: patientId, tenantId },
+    select: { id: true },
+  });
+  if (!existing) {
+    return { success: false, error: "患者が見つかりません。" };
+  }
+
+  const rawPin    = String(Math.floor(1000 + Math.random() * 9000));
+  const hashedPin = await hashPin(rawPin);
+
+  try {
+    await prisma.patient.update({
+      where: { id: patientId },
+      data:  { accessPin: hashedPin },
+    });
+  } catch (e) {
+    console.error("[regeneratePin] DB error:", e);
+    return { success: false, error: "PIN の再発行に失敗しました。" };
+  }
+
+  revalidatePath(`/${tenantSlug}/patients/${patientId}`);
+  return { success: true, pin: rawPin };
+}
+
 export async function revokeMypageToken(
   patientId:  string,
   tenantId:   string,
