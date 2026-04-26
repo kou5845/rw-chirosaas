@@ -1,32 +1,35 @@
 /**
- * PIN ハッシュユーティリティ
+ * PIN 保存・照合ユーティリティ
  *
- * bcryptjs を使用して accessPin をハッシュ化する。
- * DB にはプレーンテキストの PIN を絶対に保存しない。
+ * 保存方式の優先順位:
+ *   1. AES-256-GCM 暗号化（"enc1:" プレフィックス）← 新規発行はこれ
+ *   2. bcrypt ハッシュ（"$2b$" / "$2a$"）           ← レガシー、ログイン時に自動アップグレード
+ *   3. 平文4桁                                        ← 最古レガシー、同上
  *
- * 移行サポート:
- *   既存の平文 PIN（4桁数字）と新規 bcrypt ハッシュを透過的に比較できる。
- *   平文で一致した場合は { match: true, needsUpgrade: true } を返すので、
- *   呼び出し元が即座に bcrypt ハッシュに置き換えること。
+ * AES暗号化にすることでスタッフが管理画面からPINを確認できる。
  */
 
 import bcrypt from "bcryptjs";
+import { encryptPin, decryptPin, isEncryptedPin } from "@/lib/pin-cipher";
 
-const SALT_ROUNDS = 10;
+export { encryptPin, decryptPin, isEncryptedPin };
 
-/** 4桁 PIN を bcrypt ハッシュ化して返す */
+/**
+ * 4桁 PIN を AES-256-GCM で暗号化して返す（新規発行・更新に使用）。
+ * ※ 旧 bcrypt 版 hashPin の後継。名前を維持して呼び出し元への影響を最小化する。
+ */
 export async function hashPin(pin: string): Promise<string> {
-  return bcrypt.hash(pin, SALT_ROUNDS);
+  return encryptPin(pin);
 }
 
 type VerifyResult =
-  | { match: true;  needsUpgrade: false } // bcrypt ハッシュ一致
-  | { match: true;  needsUpgrade: true  } // 平文（レガシー）一致 → 即座に hashPin してDB更新すること
+  | { match: true;  needsUpgrade: false } // AES暗号化 一致（アップグレード不要）
+  | { match: true;  needsUpgrade: true  } // bcrypt or 平文 一致 → AES暗号化へアップグレード
   | { match: false; needsUpgrade: false }; // 不一致
 
 /**
  * 提出された PIN とDB保存値を比較する。
- * bcrypt ハッシュ（"$2b$" / "$2a$" で始まる）と平文の両方に対応。
+ * AES-256-GCM 暗号化 / bcrypt ハッシュ / 平文レガシー の3種類に対応。
  */
 export async function verifyPin(
   plain:  string,
@@ -34,17 +37,26 @@ export async function verifyPin(
 ): Promise<VerifyResult> {
   if (!stored) return { match: false, needsUpgrade: false };
 
-  // bcrypt ハッシュの場合
-  if (stored.startsWith("$2")) {
-    const ok = await bcrypt.compare(plain, stored);
+  // ── AES-256-GCM 暗号化済み（"enc1:"）──
+  if (isEncryptedPin(stored)) {
+    const decrypted = decryptPin(stored);
+    const ok = decrypted !== null && decrypted === plain;
     return ok
       ? { match: true,  needsUpgrade: false }
       : { match: false, needsUpgrade: false };
   }
 
-  // 平文（移行期サポート）— 一致した場合はすぐに bcrypt でアップグレードする
+  // ── bcrypt ハッシュ（"$2b$" / "$2a$"）— レガシー移行サポート ──
+  if (stored.startsWith("$2")) {
+    const ok = await bcrypt.compare(plain, stored);
+    return ok
+      ? { match: true,  needsUpgrade: true  } // AES暗号化へアップグレード
+      : { match: false, needsUpgrade: false };
+  }
+
+  // ── 平文（最古レガシー）──
   const ok = plain === stored;
   return ok
-    ? { match: true,  needsUpgrade: true  }
+    ? { match: true,  needsUpgrade: true  } // AES暗号化へアップグレード
     : { match: false, needsUpgrade: false };
 }

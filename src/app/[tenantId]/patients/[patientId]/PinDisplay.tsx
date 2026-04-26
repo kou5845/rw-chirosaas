@@ -3,46 +3,74 @@
 /**
  * 患者詳細ページ — 暗証番号表示 Client Component
  *
- * bcrypt 化以降、DB に平文PINは保存されない。
- * - ハッシュ済み（$2b...）または平文4桁の場合: ●●●● でマスク表示
- * - 再発行ボタン: 新しいPINを生成して一度だけ平文で表示（30秒後に自動非表示）
- * - 未設定の場合: 発行ボタンのみ表示
+ * AES-256-GCM 暗号化済みPINはサーバーが復号して表示できる。
+ * bcrypt形式（旧）は不可逆のため「再発行」で新PINに置き換える。
+ *
+ * UI フロー:
+ *   - [表示] ボタン → revealPin() → 現在のPINを表示（30秒で自動非表示）
+ *   - [再発行] ボタン → regeneratePin() → 新PINを生成・表示（30秒で自動非表示）
+ *   - 表示中: [目アイコン]（表示/非表示）と [コピー] ボタン
  */
 
 import { useState, useEffect, useTransition } from "react";
 import { RefreshCw, Copy, Check, Eye, EyeOff, Loader2 } from "lucide-react";
-import { regeneratePin } from "./patient-actions";
+import { regeneratePin, revealPin } from "./patient-actions";
 
 type Props = {
   patientId:   string;
   tenantId:    string;
   tenantSlug:  string;
-  /** DB上の accessPin 値（bcryptハッシュ or null） */
+  /** DB上の accessPin 値（AES暗号化 or bcryptハッシュ or null） */
   accessPin:   string | null;
 };
 
-export function PinDisplay({ patientId, tenantId, tenantSlug, accessPin }: Props) {
-  const [revealedPin, setRevealedPin]   = useState<string | null>(null);
-  const [showPin,     setShowPin]       = useState(false);
-  const [copied,      setCopied]        = useState(false);
-  const [error,       setError]         = useState<string | null>(null);
-  const [isPending,   startTransition]  = useTransition();
+const AUTO_HIDE_MS = 30_000; // 30秒で自動非表示
 
-  // 再発行後に 30 秒で自動マスク
+export function PinDisplay({ patientId, tenantId, tenantSlug, accessPin }: Props) {
+  const [revealedPin,  setRevealedPin]  = useState<string | null>(null);
+  const [showPin,      setShowPin]      = useState(false);
+  const [copied,       setCopied]       = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [needsReissue, setNeedsReissue] = useState(false);
+
+  const [isRevealing,  startReveal]     = useTransition();
+  const [isReissuing,  startReissue]    = useTransition();
+
+  const hasPin      = !!accessPin;
+  // AES暗号化済みか否かで「表示」ボタンを出すか決める
+  const isEncrypted = !!accessPin?.startsWith("enc1:");
+
+  // 30秒で自動非表示
   useEffect(() => {
     if (!revealedPin) return;
     const t = setTimeout(() => {
       setRevealedPin(null);
       setShowPin(false);
-    }, 30_000);
+    }, AUTO_HIDE_MS);
     return () => clearTimeout(t);
   }, [revealedPin]);
 
-  const hasPin = !!accessPin; // 設定済み（ハッシュ化済みも含む）
+  // ── 現在のPINを表示 ──
+  function handleReveal() {
+    setError(null);
+    setNeedsReissue(false);
+    startReveal(async () => {
+      const result = await revealPin(patientId, tenantId);
+      if (result.success) {
+        setRevealedPin(result.pin);
+        setShowPin(true);
+      } else {
+        setError(result.error);
+        if (result.needsReissue) setNeedsReissue(true);
+      }
+    });
+  }
 
+  // ── PIN再発行 ──
   function handleRegenerate() {
     setError(null);
-    startTransition(async () => {
+    setNeedsReissue(false);
+    startReissue(async () => {
       const result = await regeneratePin(patientId, tenantId, tenantSlug);
       if (result.success) {
         setRevealedPin(result.pin);
@@ -65,6 +93,8 @@ export function PinDisplay({ patientId, tenantId, tenantSlug, accessPin }: Props
     ? (showPin ? revealedPin : "●●●●")
     : (hasPin  ? "●●●●"     : null);
 
+  const isPending = isRevealing || isReissuing;
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between rounded-xl bg-white border border-[var(--brand-border)] px-4 py-3">
@@ -83,7 +113,7 @@ export function PinDisplay({ patientId, tenantId, tenantSlug, accessPin }: Props
                     type="button"
                     onClick={() => setShowPin((v) => !v)}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label={showPin ? "非表示" : "表示"}
+                    aria-label={showPin ? "非表示にする" : "表示する"}
                   >
                     {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
@@ -102,12 +132,12 @@ export function PinDisplay({ patientId, tenantId, tenantSlug, accessPin }: Props
 
         {/* アクションボタン群 */}
         <div className="flex items-center gap-1.5 ml-3 shrink-0">
+          {/* コピーボタン（PIN表示中のみ）*/}
           {revealedPin && showPin && (
             <button
               type="button"
               onClick={handleCopy}
               className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-              aria-label="コピー"
             >
               {copied
                 ? <><Check size={11} className="text-emerald-500" />コピー済</>
@@ -115,14 +145,32 @@ export function PinDisplay({ patientId, tenantId, tenantSlug, accessPin }: Props
               }
             </button>
           )}
+
+          {/* 表示ボタン（AES暗号化済み・未表示時のみ）*/}
+          {isEncrypted && !revealedPin && (
+            <button
+              type="button"
+              onClick={handleReveal}
+              disabled={isPending}
+              className="flex items-center gap-1 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--brand-dark)] hover:bg-[var(--brand-light)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isRevealing
+                ? <Loader2 size={11} className="animate-spin" />
+                : <Eye size={11} />
+              }
+              表示
+            </button>
+          )}
+
+          {/* 再発行ボタン */}
           <button
             type="button"
             onClick={handleRegenerate}
             disabled={isPending}
             className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label={hasPin ? "PIN再発行" : "PIN発行"}
+            aria-label={hasPin ? "暗証番号を再発行" : "暗証番号を発行"}
           >
-            {isPending
+            {isReissuing
               ? <Loader2 size={11} className="animate-spin" />
               : <RefreshCw size={11} />
             }
@@ -131,8 +179,20 @@ export function PinDisplay({ patientId, tenantId, tenantSlug, accessPin }: Props
         </div>
       </div>
 
+      {/* エラー表示 */}
       {error && (
-        <p className="px-1 text-xs text-red-600">{error}</p>
+        <p className="px-1 text-xs text-red-600">
+          {error}
+          {needsReissue && (
+            <button
+              type="button"
+              onClick={handleRegenerate}
+              className="ml-2 font-semibold underline underline-offset-2 hover:text-red-800 transition-colors"
+            >
+              今すぐ再発行 →
+            </button>
+          )}
+        </p>
       )}
     </div>
   );

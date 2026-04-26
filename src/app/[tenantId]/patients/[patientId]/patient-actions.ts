@@ -11,7 +11,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { hashPin } from "@/lib/pin";
+import { hashPin, decryptPin, isEncryptedPin } from "@/lib/pin";
 
 // ── 患者更新 ─────────────────────────────────────────────────────────
 
@@ -292,6 +292,41 @@ export async function regeneratePin(
 
   revalidatePath(`/${tenantSlug}/patients/${patientId}`);
   return { success: true, pin: rawPin };
+}
+
+// ── PIN 表示（AES暗号化済みのみ復号可能）──────────────────────────────
+
+export type RevealPinResult =
+  | { success: true;  pin: string }
+  | { success: false; error: string; needsReissue?: boolean };
+
+/**
+ * スタッフが患者の現在の暗証番号を確認する。
+ * AES-256-GCM 暗号化済みの場合のみ復号して返す。
+ * bcrypt ハッシュ（旧形式）は復号不可のため再発行を促す。
+ */
+export async function revealPin(
+  patientId:  string,
+  tenantId:   string,
+): Promise<RevealPinResult> {
+  const patient = await prisma.patient.findFirst({
+    where:  { id: patientId, tenantId },
+    select: { accessPin: true },
+  });
+  if (!patient) return { success: false, error: "患者が見つかりません。" };
+
+  const stored = patient.accessPin;
+  if (!stored) return { success: false, error: "暗証番号が未設定です。", needsReissue: true };
+
+  if (!isEncryptedPin(stored)) {
+    // bcrypt または平文レガシー → 復号不可
+    return { success: false, error: "旧形式のため表示できません。再発行してください。", needsReissue: true };
+  }
+
+  const pin = decryptPin(stored);
+  if (!pin) return { success: false, error: "復号に失敗しました。再発行してください。", needsReissue: true };
+
+  return { success: true, pin };
 }
 
 export async function revokeMypageToken(
