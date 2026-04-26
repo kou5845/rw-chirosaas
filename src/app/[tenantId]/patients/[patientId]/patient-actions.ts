@@ -287,8 +287,15 @@ export async function regeneratePin(
     return { success: false, error: "患者が見つかりません。" };
   }
 
-  const rawPin    = String(Math.floor(1000 + Math.random() * 9000));
-  const hashedPin = await hashPin(rawPin);
+  const rawPin = String(Math.floor(1000 + Math.random() * 9000));
+
+  let hashedPin: string;
+  try {
+    hashedPin = await hashPin(rawPin);
+  } catch (e) {
+    console.error("[regeneratePin] PIN暗号化エラー:", e);
+    return { success: false, error: "PIN の暗号化に失敗しました。管理者にお問い合わせください。" };
+  }
 
   try {
     await prisma.patient.update({
