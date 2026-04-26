@@ -179,7 +179,6 @@ export async function createReservation(
           address:       tenant.address,
           mypageUrl,
           customMessage: tenant.lineReceiveMsg,
-          lineFriendUrl: tenant.lineFriendUrl,
         });
         await client.pushMessage({
           to:       patient.lineUserId,
@@ -426,7 +425,6 @@ export async function updateReservationStatus(
           address:       tenant.address,
           mypageUrl,
           customMessage: tenant.lineConfirmMsg,
-          lineFriendUrl: tenant.lineFriendUrl,
         });
         await client.pushMessage({
           to:       appointment.patient.lineUserId,
@@ -574,7 +572,7 @@ export async function rejectReservation(
         const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
         await client.pushMessage({
           to:       appointment.patient.lineUserId,
-          messages: [{ type: "text", text: buildRejectionMessage({ ...notifyArgs, customMessage: tenant.lineRejectMsg, lineFriendUrl: tenant.lineFriendUrl }) }],
+          messages: [{ type: "text", text: buildRejectionMessage({ ...notifyArgs, customMessage: tenant.lineRejectMsg }) }],
         });
       }
     } catch (e) {
