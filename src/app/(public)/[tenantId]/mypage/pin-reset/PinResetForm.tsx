@@ -7,7 +7,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Loader2, AlertCircle, CheckCircle2, KeyRound, ArrowLeft } from "lucide-react";
-import { resetPin, type PinResetState } from "./action";
+import { requestPinReset, type PinResetState } from "./action";
 
 const inputBase =
   "block w-full rounded-2xl border px-4 py-3.5 text-sm text-gray-800 font-mono " +
@@ -24,7 +24,7 @@ export function PinResetForm({
   clinicName: string;
 }) {
   const [state, action, isPending] = useActionState<PinResetState, FormData>(
-    resetPin,
+    requestPinReset,
     null
   );
 
@@ -70,10 +70,11 @@ export function PinResetForm({
                   <CheckCircle2 size={28} className="text-emerald-500" />
                 </div>
                 <p className="text-base font-semibold text-gray-800">
-                  新しい暗証番号を送信しました
+                  再設定用メールを送信しました
                 </p>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  ご登録のメールアドレスに新しい暗証番号をお送りしました。<br />
+                  ご登録のメールアドレスに再設定用リンクをお送りしました。<br />
+                  リンクの有効期限は <strong>24時間</strong> です。<br />
                   メールが届かない場合はスタッフにお問い合わせください。
                 </p>
               </div>
@@ -154,7 +155,7 @@ export function PinResetForm({
                 ) : (
                   <>
                     <KeyRound size={14} />
-                    新しい暗証番号を受け取る
+                    再設定用リンクをメールで受け取る
                   </>
                 )}
               </button>

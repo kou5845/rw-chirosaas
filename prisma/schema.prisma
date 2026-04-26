@@ -263,9 +263,11 @@ model Patient {
   phone            String?   @db.VarChar(20)
   birthDate        DateTime? @map("birth_date") @db.Date
   lineUserId       String?   @unique @map("line_user_id") @db.VarChar(64) // LINE ユーザーID
-  accessToken      String?   @unique @map("access_token") @db.Uuid       // マイページ用マジックリンクトークン
-  accessPin        String?   @map("access_pin") @db.VarChar(4)           // マイページログイン用4桁PIN
-  emergencyContact String?   @map("emergency_contact") @db.VarChar(255)
+  accessToken            String?   @unique @map("access_token") @db.Uuid          // マイページ用マジックリンクトークン
+  accessPin              String?   @map("access_pin") @db.VarChar(72)              // bcrypt ハッシュ（旧: 4桁平文, 移行サポートあり）
+  pinResetToken          String?   @unique @map("pin_reset_token") @db.VarChar(64) // 暗証番号再設定ワンタイムトークン
+  pinResetTokenExpiresAt DateTime? @map("pin_reset_token_expires_at") @db.Timestamptz // 再設定トークンの有効期限（24h）
+  emergencyContact       String?   @map("emergency_contact") @db.VarChar(255)
   heightCm         Float?    @map("height_cm")  // 身長 (cm): BMI 自動計算に使用
   memo             String?   // 院内メモ（患者非表示）
   isActive         Boolean   @default(true) @map("is_active")

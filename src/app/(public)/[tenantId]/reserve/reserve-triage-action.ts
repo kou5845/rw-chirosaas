@@ -12,6 +12,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createReserveToken } from "@/lib/mypage-session";
+import { verifyPin, hashPin } from "@/lib/pin";
 
 export type TriageLoginState = { error?: string } | null;
 
@@ -42,20 +43,35 @@ export async function loginForReserve(
   const birthDate = new Date(Date.UTC(y, m - 1, d));
 
   // CLAUDE.md 絶対ルール: tenantId フィルタ必須
-  const patient = await prisma.patient.findFirst({
-    where: {
-      tenantId:  tenant.id,
-      isActive:  true,
-      birthDate,
-      accessPin: pin,
-    },
-    select: { id: true },
+  // bcrypt 比較のため birthDate で候補を絞り込んだ後、PIN をアプリ側で照合する
+  const candidates = await prisma.patient.findMany({
+    where: { tenantId: tenant.id, isActive: true, birthDate },
+    select: { id: true, accessPin: true },
   });
 
-  if (!patient) {
+  let matchedId: string | null = null;
+  let upgradePin = false;
+  for (const c of candidates) {
+    const result = await verifyPin(pin, c.accessPin);
+    if (result.match) {
+      matchedId  = c.id;
+      upgradePin = result.needsUpgrade;
+      break;
+    }
+  }
+
+  if (!matchedId) {
     return { error: "生年月日または暗証番号が正しくありません。" };
   }
 
-  const token = createReserveToken(patient.id, tenant.id);
+  // 移行: 平文 PIN をハッシュにアップグレード
+  if (upgradePin) {
+    await prisma.patient.update({
+      where: { id: matchedId },
+      data:  { accessPin: await hashPin(pin) },
+    }).catch((e) => console.error("[loginForReserve] PIN upgrade failed:", e));
+  }
+
+  const token = createReserveToken(matchedId, tenant.id);
   redirect(`/${tenantSlug}/reserve?rt=${encodeURIComponent(token)}`);
 }

@@ -25,6 +25,8 @@ type TenantInfo = {
   emailEnabled:           boolean;
   emailChangeMsg?:        string | null;
   lineChangeMsg?:         string | null;
+  /** LINE 友だち追加URL（設定時は通知メッセージ末尾に案内を追加する） */
+  lineFriendUrl?:         string | null;
 };
 
 type PatientInfo = {
@@ -95,7 +97,7 @@ export async function sendUpdateNotification({
     const client = getLineClient(tenant);
     if (client) {
       try {
-        const text = buildUpdateMessage({ ...templateArgs, customMessage: tenant.lineChangeMsg });
+        const text = buildUpdateMessage({ ...templateArgs, customMessage: tenant.lineChangeMsg, lineFriendUrl: tenant.lineFriendUrl });
         await client.pushMessage({
           to:       patient.lineUserId,
           messages: [{ type: "text", text }],
@@ -125,6 +127,7 @@ export async function sendUpdateNotification({
         oldStartAt,
         oldEndAt,
         customMessage: tenant.emailChangeMsg,
+        lineFriendUrl: tenant.lineFriendUrl,
       });
       console.log("[notificationService] メール変更通知送信");
     } catch (e) {
@@ -172,7 +175,7 @@ export async function sendCancellationNotification({
     const client = getLineClient(tenant);
     if (client) {
       try {
-        const text = buildCancellationMessage(templateArgs);
+        const text = buildCancellationMessage({ ...templateArgs, lineFriendUrl: tenant.lineFriendUrl });
         await client.pushMessage({
           to:       patient.lineUserId,
           messages: [{ type: "text", text }],
@@ -199,6 +202,7 @@ export async function sendCancellationNotification({
         phone:         tenant.phone,
         address:       tenant.address,
         mypageUrl,
+        lineFriendUrl: tenant.lineFriendUrl,
       });
       console.log("[notificationService] メールキャンセル通知送信");
     } catch (e) {

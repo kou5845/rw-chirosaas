@@ -11,6 +11,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { hashPin } from "@/lib/pin";
 
 // ── 患者更新 ─────────────────────────────────────────────────────────
 
@@ -112,11 +113,12 @@ export async function updatePatient(
 
     // 保存後に生年月日が存在する（今回入力 or 既存DB値）かつ accessPin が未設定なら自動発行
     const effectiveBirthDate = birthDate !== undefined ? birthDate : existing.birthDate;
-    const pinIsEmpty = existing.accessPin === null || existing.accessPin === "";
-    const newPin =
+    const pinIsEmpty = !existing.accessPin;
+    const rawPin =
       effectiveBirthDate !== null && pinIsEmpty
-        ? String(Math.floor(Math.random() * 10000)).padStart(4, "0")
+        ? String(Math.floor(1000 + Math.random() * 9000)) // 1000〜9999
         : null;
+    const hashedPin = rawPin ? await hashPin(rawPin) : null;
 
     await prisma.patient.update({
       where: { id: patientId },
@@ -128,7 +130,7 @@ export async function updatePatient(
         emergencyContact,
         memo,
         ...(birthDate !== undefined ? { birthDate } : {}),
-        ...(newPin !== null ? { accessPin: newPin } : {}),
+        ...(hashedPin !== null ? { accessPin: hashedPin } : {}),
       },
     });
   } catch (e: unknown) {

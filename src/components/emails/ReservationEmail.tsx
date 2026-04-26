@@ -54,6 +54,8 @@ export type ReservationEmailProps = {
   mypageUrl?:       string | null;
   /** プロプラン限定: 医院が設定するカスタムメッセージ（cancel / rejection / update 以外で表示） */
   customMessage?:   string | null;
+  /** LINE 友だち追加URL（設定時はメール末尾に友だち追加CTAを表示） */
+  lineFriendUrl?:   string | null;
 };
 
 export function ReservationEmail({
@@ -72,6 +74,7 @@ export function ReservationEmail({
   oldEndAt,
   mypageUrl,
   customMessage,
+  lineFriendUrl,
 }: ReservationEmailProps) {
   const isConfirmation = type === "confirmation";
   const isReminder     = type === "reminder";
@@ -401,6 +404,43 @@ export function ReservationEmail({
                                     }}
                                   >
                                     マイページを開く →
+                                  </a>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* ── LINE 友だち追加CTA（lineFriendUrl 設定時のみ）── */}
+                    {lineFriendUrl && (
+                      <tr>
+                        <td style={{ padding: "0 32px 24px" }}>
+                          <table width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: "#F0FFF4", borderRadius: 10, border: "1px solid #BBF7D0", overflow: "hidden" }}>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: "16px 20px" }}>
+                                  <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: "bold", color: "#15803D" }}>
+                                    💚 LINE公式アカウント
+                                  </p>
+                                  <p style={{ margin: "0 0 10px", fontSize: 12, color: "#374151", lineHeight: 1.6 }}>
+                                    友だち追加でお得なお知らせや最新情報をLINEでお届けします。
+                                  </p>
+                                  <a
+                                    href={lineFriendUrl}
+                                    style={{
+                                      display:         "inline-block",
+                                      backgroundColor: "#06C755",
+                                      color:           "#ffffff",
+                                      fontSize:        12,
+                                      fontWeight:      "bold",
+                                      padding:         "8px 16px",
+                                      borderRadius:    8,
+                                      textDecoration:  "none",
+                                    }}
+                                  >
+                                    友だち追加する →
                                   </a>
                                 </td>
                               </tr>

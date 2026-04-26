@@ -11,6 +11,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createSessionToken, COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/mypage-session";
+import { verifyPin, hashPin } from "@/lib/pin";
 
 export type LoginState = { error?: string } | null;
 
@@ -43,24 +44,39 @@ export async function loginMypage(
   const birthDate = new Date(Date.UTC(y, m - 1, d));
 
   // CLAUDE.md 絶対ルール: tenantId フィルタ必須
-  const patient = await prisma.patient.findFirst({
-    where: {
-      tenantId:  tenant.id,
-      isActive:  true,
-      birthDate,
-      accessPin: pin,
-    },
-    select: { id: true },
+  // bcrypt 比較のため birthDate で候補を絞り込んだ後、PIN をアプリ側で照合する
+  const candidates = await prisma.patient.findMany({
+    where: { tenantId: tenant.id, isActive: true, birthDate },
+    select: { id: true, accessPin: true },
   });
 
-  if (!patient) {
+  let matchedId: string | null = null;
+  let upgradePin = false;
+  for (const c of candidates) {
+    const result = await verifyPin(pin, c.accessPin);
+    if (result.match) {
+      matchedId  = c.id;
+      upgradePin = result.needsUpgrade;
+      break;
+    }
+  }
+
+  if (!matchedId) {
     // 存在しないか認証失敗 — 詳細は漏らさない
     return { error: "生年月日または暗証番号が正しくありません。" };
   }
 
+  // 移行: 平文 PIN をハッシュにアップグレード（次回以降は bcrypt で照合）
+  if (upgradePin) {
+    await prisma.patient.update({
+      where: { id: matchedId },
+      data:  { accessPin: await hashPin(pin) },
+    }).catch((e) => console.error("[loginMypage] PIN upgrade failed:", e));
+  }
+
   // セッショントークンを Cookie に保存
-  const token = createSessionToken(patient.id, tenant.id);
-  const jar   = await cookies();
+  const token = createSessionToken(matchedId, tenant.id);
+  const jar = await cookies();
   jar.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure:   process.env.NODE_ENV === "production",

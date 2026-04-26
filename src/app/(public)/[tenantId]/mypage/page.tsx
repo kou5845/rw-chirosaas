@@ -15,7 +15,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import {
-  Phone, MapPin, CalendarDays, Clock, Activity, ChevronRight, Sparkles, UserCircle,
+  Phone, MapPin, CalendarDays, Clock, Activity, ChevronRight, Sparkles, UserCircle, MessageCircle,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken, createReserveToken, COOKIE_NAME } from "@/lib/mypage-session";
@@ -51,7 +51,7 @@ export default async function MypageIndexPage({ params }: Props) {
   // テナント照合
   const tenant = await prisma.tenant.findUnique({
     where:  { subdomain: slug },
-    select: { id: true, name: true, phone: true, address: true, trainingMetricsConfig: true },
+    select: { id: true, name: true, phone: true, address: true, trainingMetricsConfig: true, lineFriendUrl: true },
   });
   if (!tenant) notFound();
 
@@ -299,6 +299,31 @@ export default async function MypageIndexPage({ params }: Props) {
           <ChevronRight size={14} className="text-[var(--brand-medium)]" />
         </Link>
       </div>
+
+      {/* ━━ LINE 友だち追加 ━━ */}
+      {tenant.lineFriendUrl && (
+        <div className="px-4 mt-3">
+          <a
+            href={tenant.lineFriendUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center gap-3 rounded-2xl bg-[#06C755] px-5 py-4 shadow-sm transition-opacity hover:opacity-90 active:opacity-80"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20">
+              <MessageCircle size={18} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">
+                LINE公式アカウント
+              </p>
+              <p className="text-sm font-semibold text-white">
+                友だち追加で最新情報をお届け
+              </p>
+            </div>
+            <ChevronRight size={16} className="text-white/60" />
+          </a>
+        </div>
+      )}
 
       <div className="space-y-4 px-4 pb-20 mt-4">
 

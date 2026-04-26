@@ -11,6 +11,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth }   from "@/auth";
+import { hashPin } from "@/lib/pin";
 
 export type CreatePatientState = {
   errors?: {
@@ -96,8 +97,9 @@ export async function createPatient(
     return { errors };
   }
 
-  // 4桁のランダムPINを生成（マイページログインPASS として使用）
-  const accessPin = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+  // 4桁のランダムPINを生成してハッシュ化（マイページログインPASS として使用）
+  const rawPin    = String(Math.floor(1000 + Math.random() * 9000)); // 1000〜9999
+  const accessPin = await hashPin(rawPin);
 
   let newPatientId: string;
 
