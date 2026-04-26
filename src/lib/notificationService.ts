@@ -97,7 +97,7 @@ export async function sendUpdateNotification({
     const client = getLineClient(tenant);
     if (client) {
       try {
-        const text = buildUpdateMessage({ ...templateArgs, customMessage: tenant.lineChangeMsg, lineFriendUrl: tenant.lineFriendUrl });
+        const text = buildUpdateMessage({ ...templateArgs, customMessage: tenant.lineChangeMsg });
         await client.pushMessage({
           to:       patient.lineUserId,
           messages: [{ type: "text", text }],
@@ -175,7 +175,7 @@ export async function sendCancellationNotification({
     const client = getLineClient(tenant);
     if (client) {
       try {
-        const text = buildCancellationMessage({ ...templateArgs, lineFriendUrl: tenant.lineFriendUrl });
+        const text = buildCancellationMessage(templateArgs);
         await client.pushMessage({
           to:       patient.lineUserId,
           messages: [{ type: "text", text }],

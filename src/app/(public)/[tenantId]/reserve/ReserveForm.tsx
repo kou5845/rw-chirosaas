@@ -382,8 +382,8 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
           </div>
         )}
 
-        {/* LINE 案内（未連携の患者のみ表示） */}
-        {lineEnabled && lineFriendUrl && !lockedPatient?.lineUserId && (
+        {/* LINE 案内（lineFriendUrl 設定済み・未LINE連携の患者に表示） */}
+        {lineFriendUrl && !lockedPatient?.lineUserId && (
           <div className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4 text-left space-y-3">
             <div className="flex items-center gap-2">
               <MessageCircle size={14} className="text-[#06C755] shrink-0" />

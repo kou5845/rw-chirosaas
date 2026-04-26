@@ -148,7 +148,6 @@ export async function GET(request: Request) {
       startAt:       item.appointment.startAt,
       endAt:         item.appointment.endAt,
       customMessage: customMessage ?? null,
-      lineFriendUrl: tenantMsgs?.lineFriendUrl ?? null,
     });
 
     try {

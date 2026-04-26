@@ -70,8 +70,6 @@ type NotificationTemplateArgs = {
   mypageUrl?:    string | null;
   /** プロプラン向けカスタムメッセージ（設定時はメッセージ末尾に追加する） */
   customMessage?: string | null;
-  /** LINE 友だち追加URL（設定時はメッセージ末尾に友だち追加案内を追加する） */
-  lineFriendUrl?: string | null;
 };
 
 /** 曜日ラベル */
@@ -101,7 +99,7 @@ function fmtTime(d: Date): string {
  * 予約確定通知のメッセージ文字列を生成する。
  */
 export function buildConfirmationMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address, mypageUrl, customMessage, lineFriendUrl } = args;
+  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address, mypageUrl, customMessage } = args;
   const lines = [
     "【ご予約確定のお知らせ】",
     `${tenantName} のご予約が確定しました。`,
@@ -130,15 +128,6 @@ export function buildConfirmationMessage(args: NotificationTemplateArgs): string
   if (customMessage?.trim()) {
     lines.push("", "─────────────────", customMessage.trim());
   }
-  if (lineFriendUrl?.trim()) {
-    lines.push(
-      "",
-      "─────────────────",
-      "💚 LINEで最新情報・お得な情報をお届けします",
-      "友だち追加はこちら →",
-      lineFriendUrl.trim(),
-    );
-  }
   return lines.join("\n");
 }
 
@@ -146,7 +135,7 @@ export function buildConfirmationMessage(args: NotificationTemplateArgs): string
  * 24時間前リマインダーのメッセージ文字列を生成する。
  */
 export function buildReminder24hMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, startAt, endAt, mypageUrl, customMessage, lineFriendUrl } = args;
+  const { tenantName, menuName, durationMin, startAt, endAt, mypageUrl, customMessage } = args;
   const lines = [
     "【明日のご予約リマインダー】",
     `${tenantName} への明日のご予約をお知らせします。`,
@@ -168,15 +157,6 @@ export function buildReminder24hMessage(args: NotificationTemplateArgs): string 
   if (customMessage?.trim()) {
     lines.push("", "─────────────────", customMessage.trim());
   }
-  if (lineFriendUrl?.trim()) {
-    lines.push(
-      "",
-      "─────────────────",
-      "💚 LINEで最新情報・お得な情報をお届けします",
-      "友だち追加はこちら →",
-      lineFriendUrl.trim(),
-    );
-  }
   return lines.join("\n");
 }
 
@@ -184,7 +164,7 @@ export function buildReminder24hMessage(args: NotificationTemplateArgs): string 
  * 2時間前リマインダーのメッセージ文字列を生成する。
  */
 export function buildReminder2hMessage(args: NotificationTemplateArgs): string {
-  const { menuName, durationMin, startAt, endAt, mypageUrl, customMessage, lineFriendUrl } = args;
+  const { menuName, durationMin, startAt, endAt, mypageUrl, customMessage } = args;
   const lines = [
     "【ご予約2時間前のリマインダー】",
     "本日のご予約まであと2時間です。",
@@ -205,15 +185,6 @@ export function buildReminder2hMessage(args: NotificationTemplateArgs): string {
   if (customMessage?.trim()) {
     lines.push("", "─────────────────", customMessage.trim());
   }
-  if (lineFriendUrl?.trim()) {
-    lines.push(
-      "",
-      "─────────────────",
-      "💚 LINEで最新情報・お得な情報をお届けします",
-      "友だち追加はこちら →",
-      lineFriendUrl.trim(),
-    );
-  }
   return lines.join("\n");
 }
 
@@ -221,7 +192,7 @@ export function buildReminder2hMessage(args: NotificationTemplateArgs): string {
  * 予約受付通知のメッセージ文字列を生成する（pending 作成直後に送信）。
  */
 export function buildReceptionMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address, mypageUrl, customMessage, lineFriendUrl } = args;
+  const { tenantName, menuName, durationMin, price, startAt, endAt, phone, address, mypageUrl, customMessage } = args;
   const lines = [
     "【ご予約受付のお知らせ】",
     `${tenantName} にてご予約を受け付けました。`,
@@ -251,15 +222,6 @@ export function buildReceptionMessage(args: NotificationTemplateArgs): string {
   if (customMessage?.trim()) {
     lines.push("", "─────────────────", customMessage.trim());
   }
-  if (lineFriendUrl?.trim()) {
-    lines.push(
-      "",
-      "─────────────────",
-      "💚 LINEで最新情報・お得な情報をお届けします",
-      "友だち追加はこちら →",
-      lineFriendUrl.trim(),
-    );
-  }
   return lines.join("\n");
 }
 
@@ -267,7 +229,7 @@ export function buildReceptionMessage(args: NotificationTemplateArgs): string {
  * キャンセル通知のメッセージ文字列を生成する。
  */
 export function buildCancellationMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, startAt, endAt, mypageUrl, lineFriendUrl } = args;
+  const { tenantName, menuName, durationMin, startAt, endAt, mypageUrl } = args;
   const lines = [
     "【ご予約キャンセルのお知らせ】",
     `${tenantName} への以下のご予約がキャンセルされました。`,
@@ -285,15 +247,6 @@ export function buildCancellationMessage(args: NotificationTemplateArgs): string
       mypageUrl,
     );
   }
-  if (lineFriendUrl?.trim()) {
-    lines.push(
-      "",
-      "─────────────────",
-      "💚 LINEで最新情報・お得な情報をお届けします",
-      "友だち追加はこちら →",
-      lineFriendUrl.trim(),
-    );
-  }
   return lines.join("\n");
 }
 
@@ -304,7 +257,7 @@ export function buildUpdateMessage(args: NotificationTemplateArgs & {
   oldStartAt: Date;
   oldEndAt:   Date;
 }): string {
-  const { tenantName, menuName, durationMin, startAt, endAt, oldStartAt, oldEndAt, phone, mypageUrl, customMessage, lineFriendUrl } = args;
+  const { tenantName, menuName, durationMin, startAt, endAt, oldStartAt, oldEndAt, phone, mypageUrl, customMessage } = args;
   const lines = [
     "【ご予約変更のお知らせ】",
     `${tenantName} のご予約日時が変更されました。`,
@@ -330,15 +283,6 @@ export function buildUpdateMessage(args: NotificationTemplateArgs & {
   if (customMessage?.trim()) {
     lines.push("", "─────────────────", customMessage.trim());
   }
-  if (lineFriendUrl?.trim()) {
-    lines.push(
-      "",
-      "─────────────────",
-      "💚 LINEで最新情報・お得な情報をお届けします",
-      "友だち追加はこちら →",
-      lineFriendUrl.trim(),
-    );
-  }
   return lines.join("\n");
 }
 
@@ -346,7 +290,7 @@ export function buildUpdateMessage(args: NotificationTemplateArgs & {
  * お断り通知のメッセージ文字列を生成する。
  */
 export function buildRejectionMessage(args: NotificationTemplateArgs): string {
-  const { tenantName, menuName, durationMin, startAt, endAt, phone, mypageUrl, customMessage, lineFriendUrl } = args;
+  const { tenantName, menuName, durationMin, startAt, endAt, phone, mypageUrl, customMessage } = args;
   const lines = [
     "【ご予約についてのお知らせ】",
     `${tenantName} です。`,
@@ -369,15 +313,6 @@ export function buildRejectionMessage(args: NotificationTemplateArgs): string {
   }
   if (customMessage?.trim()) {
     lines.push("", "─────────────────", customMessage.trim());
-  }
-  if (lineFriendUrl?.trim()) {
-    lines.push(
-      "",
-      "─────────────────",
-      "💚 LINEで最新情報・お得な情報をお届けします",
-      "友だち追加はこちら →",
-      lineFriendUrl.trim(),
-    );
   }
   return lines.join("\n");
 }
