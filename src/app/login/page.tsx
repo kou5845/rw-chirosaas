@@ -53,7 +53,7 @@ function LoginForm() {
             <Activity size={28} className="text-white" />
           </div>
           <div className="text-center">
-            <p className="text-lg font-bold text-white">chiro-saas</p>
+            <p className="text-lg font-bold text-white">SyncotBase</p>
             <p className="mt-0.5 text-sm text-white/70">整骨院管理システム</p>
           </div>
         </div>
@@ -146,7 +146,7 @@ function LoginForm() {
       </div>
 
       <p className="mt-6 text-center text-xs text-gray-400">
-        © 2026 chiro-saas. All rights reserved.
+        © 2026 SyncotBase. All rights reserved.
       </p>
     </div>
   );

@@ -23,7 +23,7 @@ export function AdminSidebar() {
           <Activity size={16} />
         </div>
         <div>
-          <p className="text-sm font-bold text-gray-800">chiro-saas</p>
+          <p className="text-sm font-bold text-gray-800">SyncotBase</p>
           <p className="text-[10px] font-medium text-[var(--brand-dark)]">システム管理</p>
         </div>
       </div>

@@ -118,7 +118,7 @@ export function Sidebar({ tenantSlug, tenantName, loginId, trainingEnabled }: Pr
         </div>
         <div className="min-w-0">
           <p className="truncate text-xs font-medium text-white/70">
-            chiro-saas
+            SyncotBase
           </p>
           <p className="truncate text-sm font-semibold text-white">
             {tenantName}
