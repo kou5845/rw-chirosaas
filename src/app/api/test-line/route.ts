@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   const sentAt = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
 
   const testMessage = [
-    "【chiro-saas テスト送信】",
+    "【SyncotBase テスト送信】",
     "",
     "LINE Messaging API の接続テストです。",
     "このメッセージが届いていれば設定は完了です ✅",
