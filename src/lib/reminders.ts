@@ -42,11 +42,12 @@ export type ReminderResult = {
 export async function sendPendingReminders(): Promise<ReminderResult> {
   const now = new Date();
 
-  // 対象ウィンドウ: now+23h 〜 now+25h（2時間幅）
-  // 毎時Cron で「ちょうど24時間前 ±1時間」に含まれる予約を対象にする。
+  // 対象ウィンドウ: now+15h 〜 now+39h（24時間幅）
+  // 日次Cron（00:15 UTC = 09:15 JST）でJST翌日全時間帯（00:15〜00:15 JST）を
+  // 漏れなくカバーするため24時間幅にする。
   // reminderSent=false フィルタが二重送信を防ぐ。
-  const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-  const windowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+  const windowStart = new Date(now.getTime() + 15 * 60 * 60 * 1000);
+  const windowEnd   = new Date(now.getTime() + 39 * 60 * 60 * 1000);
 
   console.log(
     `[reminders] 実行開始 executedAt=${now.toISOString()} ` +
