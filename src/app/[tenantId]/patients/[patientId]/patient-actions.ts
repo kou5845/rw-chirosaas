@@ -15,6 +15,7 @@ import { hashPin, decryptPin, isEncryptedPin } from "@/lib/pin";
 import { sendSecurityEmail } from "@/lib/email";
 import { buildMypageUrl } from "@/lib/mypage";
 import { escapeHtml } from "@/lib/utils";
+import { messagingApi } from "@line/bot-sdk";
 
 // ── 患者更新 ─────────────────────────────────────────────────────────
 
@@ -276,19 +277,26 @@ export async function regeneratePin(
   const [patient, tenant] = await Promise.all([
     prisma.patient.findFirst({
       where:  { id: patientId, tenantId },
-      select: { id: true, displayName: true, email: true, birthDate: true, accessToken: true },
+      select: { id: true, displayName: true, email: true, birthDate: true, accessToken: true, lineUserId: true },
     }),
     prisma.tenant.findUnique({
       where:  { id: tenantId },
-      select: { name: true, subdomain: true },
+      select: { name: true, subdomain: true, lineEnabled: true, lineChannelAccessToken: true },
     }),
   ]);
   if (!patient || !tenant) {
     return { success: false, error: "患者が見つかりません。" };
   }
 
-  const rawPin    = String(Math.floor(1000 + Math.random() * 9000));
-  const hashedPin = await hashPin(rawPin);
+  const rawPin = String(Math.floor(1000 + Math.random() * 9000));
+
+  let hashedPin: string;
+  try {
+    hashedPin = await hashPin(rawPin);
+  } catch (e) {
+    console.error("[regeneratePin] PIN暗号化エラー:", e);
+    return { success: false, error: "PIN の暗号化に失敗しました。管理者にお問い合わせください。" };
+  }
 
   try {
     await prisma.patient.update({
@@ -347,6 +355,31 @@ export async function regeneratePin(
       tenantName: tenant.name,
       bodyHtml,
     }).catch((e) => console.error("[regeneratePin] メール送信失敗:", e));
+  }
+
+  // LINE通知（患者がLINE連携済みの場合のみ）
+  if (tenant.lineEnabled && patient.lineUserId) {
+    const lineToken = tenant.lineChannelAccessToken?.trim() || process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
+    if (lineToken) {
+      const loginUrl = tenant.subdomain
+        ? `${process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? ""}/${tenant.subdomain}/mypage/login`
+        : null;
+      const lineText = [
+        `【${tenant.name}】`,
+        `暗証番号（PASS）が再発行されました。`,
+        ``,
+        `新しい暗証番号：${rawPin}`,
+        ``,
+        loginUrl ? `マイページログイン:\n${loginUrl}` : null,
+        `ご不明な点は当院までお問い合わせください。`,
+      ].filter((l) => l !== null).join("\n");
+
+      const lineClient = new messagingApi.MessagingApiClient({ channelAccessToken: lineToken });
+      lineClient.pushMessage({
+        to:       patient.lineUserId,
+        messages: [{ type: "text", text: lineText }],
+      }).catch((e: unknown) => console.error("[regeneratePin] LINE通知失敗:", e));
+    }
   }
 
   revalidatePath(`/${tenantSlug}/patients/${patientId}`);
