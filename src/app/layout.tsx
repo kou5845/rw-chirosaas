@@ -22,6 +22,10 @@ export const metadata: Metadata = {
   keywords: ["整骨院", "予約管理", "LINE連携", "カルテ", "SyncotBase"],
   authors: [{ name: "SyncotBase" }],
   robots: { index: false, follow: false }, // 管理システムなので検索エンジンには非公開
+  icons: {
+    icon:  [{ url: "/icon", type: "image/png" }],
+    apple: [{ url: "/apple-icon", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({
