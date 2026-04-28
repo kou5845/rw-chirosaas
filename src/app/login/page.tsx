@@ -54,7 +54,7 @@ function LoginForm() {
           </div>
           <div className="text-center">
             <p className="text-lg font-bold text-white">SyncotBase</p>
-            <p className="mt-0.5 text-sm text-white/70">整骨院管理システム</p>
+            <p className="mt-0.5 text-sm text-white/70">予約管理システム</p>
           </div>
         </div>
 

@@ -6,6 +6,12 @@
  * - (public) route group 内に配置し、[tenantId]/layout.tsx の影響を受けない
  */
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "マイページ",
+};
+
 export default function MypageLayout({
   children,
 }: {
