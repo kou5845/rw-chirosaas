@@ -113,6 +113,14 @@ model Tenant {
   lineReceiveMsg    String?  @map("line_receive_msg")    // LINE×予約受付
   emailRejectMsg    String?  @map("email_reject_msg")    // メール×お断り
   lineRejectMsg     String?  @map("line_reject_msg")     // LINE×お断り
+  // ── 契約・請求管理（SuperAdmin用）──────────────────────────────────
+  contractType    String    @default("monthly")  @map("contract_type")   // monthly / yearly
+  monthlyPrice    Int       @default(0)           @map("monthly_price")   // 基本料金（円）
+  contractStartAt DateTime? @map("contract_start_at") @db.Timestamptz    // 契約開始日
+  nextBillingAt   DateTime? @map("next_billing_at")   @db.Timestamptz    // 次回請求日
+  totalRevenue    Int       @default(0)           @map("total_revenue")   // 累計支払額（円）
+  adminMemo       String?   @map("admin_memo")    @db.Text               // 運営用メモ
+
   isActive           Boolean    @default(true) @map("is_active")
   businessStartTime  String     @default("09:00") @map("business_start_time") @db.VarChar(5)
   businessEndTime    String     @default("20:00") @map("business_end_time")   @db.VarChar(5)
