@@ -10,6 +10,7 @@ import Link from "next/link";
 import { Building2, PlusCircle, Users, CalendarDays, CheckCircle2, XCircle, MessageCircle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { TenantActions } from "./TenantActions";
+import { TenantCsvButton } from "./TenantCsvButton";
 
 export default async function AdminTenantsPage() {
   const tenants = await prisma.tenant.findMany({
@@ -36,13 +37,31 @@ export default async function AdminTenantsPage() {
           <h1 className="text-xl font-semibold text-gray-800">テナント一覧</h1>
           <p className="mt-0.5 text-sm text-gray-500">契約中の医院 {tenants.length} 件</p>
         </div>
-        <Link
-          href="/admin/tenants/new"
-          className="flex items-center gap-2 rounded-xl bg-[var(--brand-medium)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[var(--brand-dark)] transition-colors"
-        >
-          <PlusCircle size={15} />
-          新規医院登録
-        </Link>
+        <div className="flex items-center gap-2">
+          <TenantCsvButton tenants={tenants.map(t => ({
+            id:            t.id,
+            name:          t.name,
+            subdomain:     t.subdomain ?? "",
+            plan:          t.plan,
+            isActive:      t.isActive,
+            contractType:  t.contractType,
+            monthlyPrice:  t.monthlyPrice,
+            totalRevenue:  t.totalRevenue,
+            phone:         t.phone ?? "",
+            address:       t.address ?? "",
+            adminEmail:    t.user?.email ?? "",
+            patients:      t._count.patients,
+            appointments:  t._count.appointments,
+            createdAt:     t.createdAt.toISOString().slice(0, 10),
+          }))} />
+          <Link
+            href="/admin/tenants/new"
+            className="flex items-center gap-2 rounded-xl bg-[var(--brand-medium)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[var(--brand-dark)] transition-colors"
+          >
+            <PlusCircle size={15} />
+            新規医院登録
+          </Link>
+        </div>
       </div>
 
       {/* テナントリスト */}
@@ -200,15 +219,9 @@ export default async function AdminTenantsPage() {
                   <td className="px-5 py-3.5">
                     <TenantActions
                       tenant={{
-                        id:                     t.id,
-                        name:                   t.name,
-                        plan:                   t.plan,
-                        isActive:               t.isActive,
-                        lineChannelSecret:      t.lineChannelSecret,
-                        lineChannelAccessToken: t.lineChannelAccessToken,
-                        lineFriendUrl:          t.lineFriendUrl,
-                        phone:                  t.phone,
-                        address:                t.address,
+                        id:       t.id,
+                        name:     t.name,
+                        isActive: t.isActive,
                       }}
                     />
                   </td>
