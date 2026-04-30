@@ -41,8 +41,6 @@ type Props = {
   tenantSlug:       string;
   staffList:        Staff[];
   businessHours:    BusinessHourData[];
-  lunchStartTime:   string | null;
-  lunchEndTime:     string | null;
   slotInterval:     number;
   services?:        ServiceItem[];
   exercises?:       ExerciseItem[];
@@ -91,8 +89,6 @@ export function AppointmentListCard({
   tenantSlug,
   staffList,
   businessHours,
-  lunchStartTime,
-  lunchEndTime,
   slotInterval,
   services,
   exercises,
@@ -297,8 +293,6 @@ export function AppointmentListCard({
           tenantSlug={tenantSlug}
           staffList={staffList}
           businessHours={businessHours}
-          lunchStartTime={lunchStartTime}
-          lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           editMode={editModeData}
           services={services}

@@ -47,10 +47,13 @@ export type SerializedAppointment = {
 };
 
 export type BusinessHourData = {
-  dayOfWeek: number;   // 0=日, 1=月, ..., 6=土
-  isOpen:    boolean;
-  openTime:  string;   // "HH:mm"
-  closeTime: string;   // "HH:mm"
+  dayOfWeek:    number;   // 0=日, 1=月, ..., 6=土
+  isOpen:       boolean;
+  openTime:     string;   // "HH:mm"
+  closeTime:    string;   // "HH:mm"
+  hasLunchBreak: boolean;
+  lunchStart:   string | null;
+  lunchEnd:     string | null;
 };
 
 export type Props = {
@@ -59,8 +62,6 @@ export type Props = {
   slug:           string;
   pendingCount:   number;
   businessHours:  BusinessHourData[];
-  lunchStartTime: string | null;
-  lunchEndTime:   string | null;
   /** グリッドの空き枠クリック時に日付と時刻を返す */
   onSlotClick?:  (date: string, time: string) => void;
   /** ナビバーの「新規予約」ボタンを有効化するコールバック */
@@ -172,7 +173,7 @@ function buildBhMap(businessHours: BusinessHourData[]): Map<number, BusinessHour
   for (const bh of businessHours) map.set(bh.dayOfWeek, bh);
   for (const d of [0, 1, 2, 3, 4, 5, 6]) {
     if (!map.has(d)) {
-      map.set(d, { dayOfWeek: d, isOpen: d !== 0, openTime: "09:00", closeTime: "20:00" });
+      map.set(d, { dayOfWeek: d, isOpen: d !== 0, openTime: "09:00", closeTime: "20:00", hasLunchBreak: true, lunchStart: "12:00", lunchEnd: "13:00" });
     }
   }
   return map;
@@ -517,8 +518,6 @@ export function WeeklyCalendar({
   slug,
   pendingCount,
   businessHours,
-  lunchStartTime,
-  lunchEndTime,
   onSlotClick,
   onNewAppt,
   calGridRef,
@@ -732,8 +731,9 @@ export function WeeklyCalendar({
               const postCloseStyle = !isHoliday && timeToMin(bh.closeTime) < gridEndMin
                 ? calcShade(timeToMin(bh.closeTime), gridEndMin, gridStartMin)
                 : null;
-              const lunchStyle = !isHoliday && lunchStartTime && lunchEndTime
-                ? calcShade(timeToMin(lunchStartTime), timeToMin(lunchEndTime), gridStartMin)
+              const dayBh = bhMap.get(jsDay);
+              const lunchStyle = !isHoliday && dayBh?.hasLunchBreak && dayBh?.lunchStart && dayBh?.lunchEnd
+                ? calcShade(timeToMin(dayBh.lunchStart), timeToMin(dayBh.lunchEnd), gridStartMin)
                 : null;
 
               return (

@@ -42,8 +42,6 @@ export default async function SettingsPage({ params }: Props) {
     select: {
       id:                     true,
       name:                   true,
-      lunchStartTime:         true,
-      lunchEndTime:           true,
       slotInterval:           true,
       maxCapacity:            true,
       lineChannelSecret:      true,
@@ -83,7 +81,7 @@ export default async function SettingsPage({ params }: Props) {
     }),
     prisma.businessHour.findMany({
       where:   { tenantId: tenant.id },
-      select:  { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
+      select:  { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true, hasLunchBreak: true, lunchStart: true, lunchEnd: true },
       orderBy: { dayOfWeek: "asc" },
     }),
     loginId
@@ -131,11 +129,9 @@ export default async function SettingsPage({ params }: Props) {
           />
           <div className="mt-4">
             <BusinessHoursForm
-              key={JSON.stringify(businessHours) + tenant.lunchStartTime + tenant.lunchEndTime}
+              key={JSON.stringify(businessHours)}
               tenantSlug={slug}
               businessHours={businessHours}
-              lunchStartTime={tenant.lunchStartTime}
-              lunchEndTime={tenant.lunchEndTime}
               slotInterval={tenant.slotInterval}
               maxCapacity={tenant.maxCapacity}
             />
@@ -173,8 +169,6 @@ export default async function SettingsPage({ params }: Props) {
             slotInterval={tenant.slotInterval}
             maxCapacity={tenant.maxCapacity}
             businessHours={businessHours}
-            lunchStartTime={tenant.lunchStartTime}
-            lunchEndTime={tenant.lunchEndTime}
           />
         </div>
       </div>

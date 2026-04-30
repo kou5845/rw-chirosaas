@@ -7,6 +7,7 @@
  * 営業時間フィールドは hidden で DB 現在値を送信してアクション整合性を保つ。
  */
 
+import React from "react";
 import { useActionState } from "react";
 import { Save, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { updateTenantSettings, type SettingsState } from "./actions";
@@ -18,8 +19,6 @@ type Props = {
   maxCapacity:   number;
   /** 営業時間の現在値（hidden送信用） */
   businessHours: BusinessHourData[];
-  lunchStartTime: string | null;
-  lunchEndTime:   string | null;
 };
 
 const selectCls =
@@ -37,8 +36,6 @@ export function ReservationSlotsForm({
   slotInterval,
   maxCapacity,
   businessHours,
-  lunchStartTime,
-  lunchEndTime,
 }: Props) {
   const [state, action, isPending] = useActionState<SettingsState, FormData>(
     updateTenantSettings,
@@ -49,24 +46,21 @@ export function ReservationSlotsForm({
     <form action={action} className="space-y-6">
       {/* ── hidden: 営業時間の現在値を引き継ぎ送信 ── */}
       <input type="hidden" name="tenantSlug" value={tenantSlug} />
-      {/* 昼休み */}
-      {lunchStartTime ? (
-        <>
-          <input type="hidden" name="lunchStartTime" value={lunchStartTime} />
-          <input type="hidden" name="lunchEndTime"   value={lunchEndTime ?? ""} />
-        </>
-      ) : (
-        <input type="hidden" name="noLunch" value="on" />
-      )}
+      {/* 曜日別昼休み */}
+      {businessHours.map((bh) => (
+        <React.Fragment key={bh.dayOfWeek}>
+          {bh.hasLunchBreak && <input type="hidden" name={`hasLunchBreak-${bh.dayOfWeek}`} value="on" />}
+          <input type="hidden" name={`lunchStart-${bh.dayOfWeek}`} value={bh.lunchStart ?? "12:00"} />
+          <input type="hidden" name={`lunchEnd-${bh.dayOfWeek}`}   value={bh.lunchEnd   ?? "13:00"} />
+        </React.Fragment>
+      ))}
       {/* 曜日別営業時間 */}
       {businessHours.map((bh) => (
-        <span key={bh.dayOfWeek}>
-          {bh.isOpen && (
-            <input type="hidden" name={`isOpen-${bh.dayOfWeek}`} value="on" />
-          )}
+        <React.Fragment key={`oh-${bh.dayOfWeek}`}>
+          {bh.isOpen && <input type="hidden" name={`isOpen-${bh.dayOfWeek}`} value="on" />}
           <input type="hidden" name={`openTime-${bh.dayOfWeek}`}  value={bh.openTime} />
           <input type="hidden" name={`closeTime-${bh.dayOfWeek}`} value={bh.closeTime} />
-        </span>
+        </React.Fragment>
       ))}
 
       {/* 全体エラー */}

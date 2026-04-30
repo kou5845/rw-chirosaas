@@ -28,12 +28,10 @@ export default async function DashboardPage({ params }: Props) {
   const tenant = await prisma.tenant.findUnique({
     where:  { subdomain: slug },
     select: {
-      id:             true,
-      name:           true,
-      plan:           true,
-      slotInterval:   true,
-      lunchStartTime: true,
-      lunchEndTime:   true,
+      id:           true,
+      name:         true,
+      plan:         true,
+      slotInterval: true,
     },
   });
   if (!tenant) notFound();
@@ -97,7 +95,7 @@ export default async function DashboardPage({ params }: Props) {
     }),
     prisma.businessHour.findMany({
       where:  { tenantId: tenant.id },
-      select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
+      select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true, hasLunchBreak: true, lunchStart: true, lunchEnd: true },
     }),
     prisma.staff.findMany({
       where:   { tenantId: tenant.id, isActive: true },
@@ -240,8 +238,6 @@ export default async function DashboardPage({ params }: Props) {
           appointments={upcomingAppointments}
           staffList={staffList}
           businessHours={rawHours}
-          lunchStartTime={tenant.lunchStartTime}
-          lunchEndTime={tenant.lunchEndTime}
           slotInterval={tenant.slotInterval}
         />
       </div>

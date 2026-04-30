@@ -24,8 +24,6 @@ type Props = {
   tenantId:       string;
   staffList:      Staff[];
   businessHours:  BusinessHourData[];
-  lunchStartTime: string | null;
-  lunchEndTime:   string | null;
   slotInterval:   number;
 };
 
@@ -35,8 +33,6 @@ export function PendingApprovalList({
   tenantId,
   staffList,
   businessHours,
-  lunchStartTime,
-  lunchEndTime,
   slotInterval,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -156,8 +152,6 @@ export function PendingApprovalList({
           tenantSlug={slug}
           staffList={staffList}
           businessHours={businessHours}
-          lunchStartTime={lunchStartTime}
-          lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           selectable
           selected={selectedIds.has(appt.id)}

@@ -26,10 +26,13 @@ import {
 // ── 外部公開型 ────────────────────────────────────────────────────────────────
 
 export type BusinessHourData = {
-  dayOfWeek: number;
-  isOpen:    boolean;
-  openTime:  string;
-  closeTime: string;
+  dayOfWeek:    number;
+  isOpen:       boolean;
+  openTime:     string;
+  closeTime:    string;
+  hasLunchBreak: boolean;
+  lunchStart:   string | null;
+  lunchEnd:     string | null;
 };
 
 export type ServiceItem = {
@@ -72,8 +75,6 @@ type Props = {
   patientList?:    Patient[];
   staffList:       Staff[];
   businessHours:   BusinessHourData[];
-  lunchStartTime:  string | null;
-  lunchEndTime:    string | null;
   slotInterval?:   number;
   initialDate?:    string;
   initialTime?:    string;
@@ -110,8 +111,6 @@ function validateSlot(
   timeStr: string,
   duration: number,
   businessHours: BusinessHourData[],
-  lunchStartTime: string | null,
-  lunchEndTime:   string | null,
 ): string | null {
   if (!dateStr || !timeStr || !duration) return null;
 
@@ -129,10 +128,10 @@ function validateSlot(
   if (startMin < timeToMin(openTime))  return `営業開始前です（開始: ${openTime}〜）`;
   if (endMin > timeToMin(closeTime))   return `終業時間を超えます（〜${closeTime}まで）`;
 
-  if (lunchStartTime && lunchEndTime) {
-    const ls = timeToMin(lunchStartTime), le = timeToMin(lunchEndTime);
+  if (bh.hasLunchBreak && bh.lunchStart && bh.lunchEnd) {
+    const ls = timeToMin(bh.lunchStart), le = timeToMin(bh.lunchEnd);
     if (startMin < le && endMin > ls)
-      return `昼休みと重複しています（${lunchStartTime}〜${lunchEndTime}）`;
+      return `昼休みと重複しています（${bh.lunchStart}〜${bh.lunchEnd}）`;
   }
 
   return null;
@@ -256,8 +255,6 @@ export function NewAppointmentDialog({
   patientList,
   staffList,
   businessHours,
-  lunchStartTime,
-  lunchEndTime,
   slotInterval = 30,
   initialDate,
   initialTime,
@@ -311,7 +308,7 @@ export function NewAppointmentDialog({
 
   const slotWarning = validateSlot(
     selectedDate, selectedTime, selectedDuration,
-    businessHours, lunchStartTime, lunchEndTime,
+    businessHours,
   );
   const hasSlotError    = slotWarning !== null && Boolean(selectedDate && selectedTime && selectedDuration);
   const hasPatientError = needPatientSelect && !selectedPatient;
