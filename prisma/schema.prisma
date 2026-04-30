@@ -547,12 +547,15 @@ model Service {
 /// 曜日ごとの営業時間設定。
 /// dayOfWeek は JS の getDay() と同じ: 0=日, 1=月, ..., 6=土
 model BusinessHour {
-  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String  @map("tenant_id") @db.Uuid
-  dayOfWeek Int     @map("day_of_week")
-  isOpen    Boolean @default(true)  @map("is_open")
-  openTime  String  @default("09:00") @map("open_time")  @db.VarChar(5)
-  closeTime String  @default("20:00") @map("close_time") @db.VarChar(5)
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String  @map("tenant_id") @db.Uuid
+  dayOfWeek    Int     @map("day_of_week")
+  isOpen       Boolean @default(true)    @map("is_open")
+  openTime     String  @default("09:00") @map("open_time")      @db.VarChar(5)
+  closeTime    String  @default("20:00") @map("close_time")     @db.VarChar(5)
+  hasLunchBreak Boolean @default(true)  @map("has_lunch_break")
+  lunchStart   String? @default("12:00") @map("lunch_start")   @db.VarChar(5)
+  lunchEnd     String? @default("13:00") @map("lunch_end")     @db.VarChar(5)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

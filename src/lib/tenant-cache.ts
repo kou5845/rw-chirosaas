@@ -27,8 +27,6 @@ export const getTenantBySlug = unstable_cache(
         plan:                   true,
         slotInterval:           true,
         maxCapacity:            true,
-        lunchStartTime:         true,
-        lunchEndTime:           true,
         lineChannelSecret:      true,
         lineChannelAccessToken: true,
         lineFriendUrl:          true,
@@ -78,7 +76,7 @@ export const getTenantBusinessHours = unstable_cache(
   async (tenantId: string) => {
     return prisma.businessHour.findMany({
       where:   { tenantId },
-      select:  { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
+      select:  { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true, hasLunchBreak: true, lunchStart: true, lunchEnd: true },
       orderBy: { dayOfWeek: "asc" },
     });
   },

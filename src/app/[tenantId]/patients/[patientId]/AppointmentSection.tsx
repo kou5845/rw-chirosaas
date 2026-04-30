@@ -38,8 +38,6 @@ type Props = {
   staffList:        Staff[];
   appointments:     Appointment[];
   businessHours:    BusinessHourData[];
-  lunchStartTime:   string | null;
-  lunchEndTime:     string | null;
   slotInterval:     number;
   services?:        ServiceItem[];
   exercises?:       ExerciseItem[];
@@ -64,7 +62,7 @@ const STATUS_CONFIG = {
 
 export function AppointmentSection({
   tenantId, tenantSlug, patientId, staffList, appointments,
-  businessHours, lunchStartTime, lunchEndTime, slotInterval,
+  businessHours, slotInterval,
   services, exercises, isProfessional, trainingEnabled,
 }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -162,8 +160,6 @@ export function AppointmentSection({
           patientId={patientId}
           staffList={staffList}
           businessHours={businessHours}
-          lunchStartTime={lunchStartTime}
-          lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           services={services}
           exercises={exercises}

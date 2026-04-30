@@ -43,8 +43,6 @@ type Props = {
   pendingCount:     number;
   tenantId:         string;
   businessHours:    BusinessHourData[];
-  lunchStartTime:   string | null;
-  lunchEndTime:     string | null;
   slotInterval:     number;
   maxCapacity:      number;
   staffList:        Staff[];
@@ -89,7 +87,7 @@ function buildBhMap(businessHours: BusinessHourData[]): Map<number, BusinessHour
   for (const bh of businessHours) map.set(bh.dayOfWeek, bh);
   for (const d of [0, 1, 2, 3, 4, 5, 6]) {
     if (!map.has(d)) {
-      map.set(d, { dayOfWeek: d, isOpen: d !== 0, openTime: "09:00", closeTime: "20:00" });
+      map.set(d, { dayOfWeek: d, isOpen: d !== 0, openTime: "09:00", closeTime: "20:00", hasLunchBreak: true, lunchStart: "12:00", lunchEnd: "13:00" });
     }
   }
   return map;
@@ -167,15 +165,11 @@ function isDropAllowed({
   newEndMin,
   dayOfWeek,
   bhMap,
-  lunchStartTime,
-  lunchEndTime,
 }: {
   newStartMin:    number;
   newEndMin:      number;
   dayOfWeek:      number; // 0=日, 1=月,...
   bhMap:          Map<number, BusinessHourData>;
-  lunchStartTime: string | null;
-  lunchEndTime:   string | null;
 }): { ok: boolean; reason?: string } {
   const bh = bhMap.get(dayOfWeek);
   if (!bh || !bh.isOpen) {
@@ -187,10 +181,9 @@ function isDropAllowed({
   if (newEndMin > timeToMin(bh.closeTime)) {
     return { ok: false, reason: "営業終了後の時間帯には移動できません" };
   }
-  if (lunchStartTime && lunchEndTime) {
-    const lunchStart = timeToMin(lunchStartTime);
-    const lunchEnd   = timeToMin(lunchEndTime);
-    // 予約が昼休みと重なる場合は拒否
+  if (bh.hasLunchBreak && bh.lunchStart && bh.lunchEnd) {
+    const lunchStart = timeToMin(bh.lunchStart);
+    const lunchEnd   = timeToMin(bh.lunchEnd);
     if (newStartMin < lunchEnd && newEndMin > lunchStart) {
       return { ok: false, reason: "昼休み時間帯には移動できません" };
     }
@@ -326,8 +319,6 @@ export function AppointmentsWeekView({
   pendingCount,
   tenantId,
   businessHours,
-  lunchStartTime,
-  lunchEndTime,
   slotInterval,
   maxCapacity,
   staffList,
@@ -494,8 +485,6 @@ export function AppointmentsWeekView({
       newEndMin,
       dayOfWeek,
       bhMap,
-      lunchStartTime,
-      lunchEndTime,
     });
 
     if (!validation.ok) {
@@ -551,7 +540,7 @@ export function AppointmentsWeekView({
       setLocalAppts(originalAppts);
       showToast("通信エラーが発生しました。再度お試しください。");
     }
-  }, [localAppts, slug, weekStartStr, gridStartHour, slotInterval, bhMap, lunchStartTime, lunchEndTime, showToast]);
+  }, [localAppts, slug, weekStartStr, gridStartHour, slotInterval, bhMap, showToast]);
 
   return (
     <>
@@ -567,8 +556,6 @@ export function AppointmentsWeekView({
           slug={slug}
           pendingCount={pendingCount}
           businessHours={businessHours}
-          lunchStartTime={lunchStartTime}
-          lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           dragIndicator={dragIndicator}
           onNewAppt={() => openModal()}
@@ -597,8 +584,6 @@ export function AppointmentsWeekView({
           patientList={patientList}
           staffList={staffList}
           businessHours={businessHours}
-          lunchStartTime={lunchStartTime}
-          lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           initialDate={initialDate}
           initialTime={initialTime}
@@ -617,8 +602,6 @@ export function AppointmentsWeekView({
           tenantSlug={slug}
           staffList={staffList}
           businessHours={businessHours}
-          lunchStartTime={lunchStartTime}
-          lunchEndTime={lunchEndTime}
           slotInterval={slotInterval}
           editMode={editMode}
           services={services}

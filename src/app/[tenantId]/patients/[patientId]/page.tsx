@@ -61,7 +61,7 @@ export default async function PatientDetailPage({ params }: Props) {
   // テナントを解決（昼休みも取得）
   const tenant = await prisma.tenant.findUnique({
     where:  { subdomain: slug },
-    select: { id: true, name: true, lunchStartTime: true, lunchEndTime: true, slotInterval: true, trainingMetricsConfig: true },
+    select: { id: true, name: true, slotInterval: true, trainingMetricsConfig: true },
   });
   if (!tenant) notFound();
 
@@ -168,7 +168,7 @@ export default async function PatientDetailPage({ params }: Props) {
     // 曜日別営業時間
     prisma.businessHour.findMany({
       where:  { tenantId: tenant.id },
-      select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
+      select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true, hasLunchBreak: true, lunchStart: true, lunchEnd: true },
     }),
     // 全予約（新しい順）
     prisma.appointment.findMany({
@@ -463,8 +463,6 @@ export default async function PatientDetailPage({ params }: Props) {
             staffList={staffList}
             appointments={appointments}
             businessHours={businessHours}
-            lunchStartTime={tenant.lunchStartTime}
-            lunchEndTime={tenant.lunchEndTime}
             slotInterval={tenant.slotInterval}
             services={services}
             exercises={exercises}

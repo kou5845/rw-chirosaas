@@ -60,12 +60,10 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   const tenant = await prisma.tenant.findUnique({
     where:  { subdomain: slug },
     select: {
-      id:             true,
-      name:           true,
-      lunchStartTime: true,
-      lunchEndTime:   true,
-      slotInterval:   true,
-      maxCapacity:    true,
+      id:           true,
+      name:         true,
+      slotInterval: true,
+      maxCapacity:  true,
     },
   });
   if (!tenant) notFound();
@@ -98,7 +96,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
     // 曜日別営業時間
     prisma.businessHour.findMany({
       where:  { tenantId: tenant.id },
-      select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true },
+      select: { dayOfWeek: true, isOpen: true, openTime: true, closeTime: true, hasLunchBreak: true, lunchStart: true, lunchEnd: true },
     }),
     // スタッフ一覧（週間ビューの新規予約モーダル + リストビューの編集ダイアログで使用）
     prisma.staff.findMany({
@@ -308,8 +306,6 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
           pendingCount={pendingCount}
           tenantId={tenant.id}
           businessHours={businessHours}
-          lunchStartTime={tenant.lunchStartTime}
-          lunchEndTime={tenant.lunchEndTime}
           slotInterval={tenant.slotInterval}
           maxCapacity={tenant.maxCapacity}
           staffList={staffList}
@@ -406,8 +402,6 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
               tenantId={tenant.id}
               staffList={staffList}
               businessHours={businessHours}
-              lunchStartTime={tenant.lunchStartTime}
-              lunchEndTime={tenant.lunchEndTime}
               slotInterval={tenant.slotInterval}
             />
           ) : (
@@ -437,8 +431,6 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
                     tenantSlug={slug}
                     staffList={staffList}
                     businessHours={businessHours}
-                    lunchStartTime={tenant.lunchStartTime}
-                    lunchEndTime={tenant.lunchEndTime}
                     slotInterval={tenant.slotInterval}
                     services={services}
                     exercises={exercises}
