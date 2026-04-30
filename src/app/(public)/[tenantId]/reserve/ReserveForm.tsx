@@ -17,6 +17,7 @@ import {
   getAvailableSlots, submitPublicReservation, checkPatientMatch,
   type PublicReservationState,
 } from "./actions";
+import { PrivacyPolicyConsent } from "@/components/PrivacyPolicyConsent";
 
 // ── 型定義 ────────────────────────────────────────────────────────────
 
@@ -225,6 +226,9 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
   useEffect(() => {
     if (formState?.success) setStep("done");
   }, [formState]);
+
+  // ── 個人情報同意ステート ──
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
   // ── 患者照合・警告ステート ──
   const [warningState,  setWarningState]  = useState<WarningState | null>(null);
@@ -899,10 +903,15 @@ export function ReserveForm({ tenantSlug, businessHours, services, phone, addres
         </div>
       )}
 
+      {/* 個人情報保護方針への同意（警告表示中は非表示） */}
+      {!warningState && (
+        <PrivacyPolicyConsent onAgreedChange={setPrivacyAgreed} />
+      )}
+
       {/* 送信ボタン（警告表示中は非表示） */}
       {!warningState && (
         <div className="pt-1">
-          <button type="submit" disabled={isPending || isChecking} className={btnPrimary}>
+          <button type="submit" disabled={isPending || isChecking || !privacyAgreed} className={btnPrimary}>
             {isPending
               ? <><Loader2 size={16} className="animate-spin" />送信中…</>
               : isChecking
