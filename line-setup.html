@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LINE連携 設定ガイド — SyncotBase</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      font-size: 15px;
+      line-height: 1.8;
+      color: #1f2937;
+      background: #f9fafb;
+    }
+
+    :root {
+      --brand:       #5BBAC4;
+      --brand-dark:  #3d9aa6;
+      --brand-light: #e8f7f9;
+      --brand-bg:    #f0fbfc;
+      --line:        #06C755;
+      --line-dark:   #05a849;
+      --line-bg:     #f0fdf4;
+      --line-border: #bbf7d0;
+      --text:        #1f2937;
+      --text-muted:  #6b7280;
+      --border:      #e5e7eb;
+      --sidebar-w:   260px;
+    }
+
+    /* ── レイアウト ── */
+    .layout { display: flex; min-height: 100vh; }
+
+    /* ── サイドバー ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: #1e293b;
+      color: #e2e8f0;
+      position: fixed;
+      top: 0; left: 0;
+      overflow-y: auto;
+      z-index: 100;
+    }
+    .sidebar-logo {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid #334155;
+    }
+    .sidebar-logo .app-name {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.02em;
+    }
+    .sidebar-logo .app-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .sidebar-logo .badge {
+      display: inline-block;
+      background: var(--line);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 99px;
+      margin-top: 6px;
+    }
+    .nav-group { padding: 16px 0 0; }
+    .nav-group-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748b;
+      padding: 0 20px 6px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      font-size: 13px;
+      color: #cbd5e1;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .nav-item:hover { background: #334155; color: #fff; }
+    .nav-item.active { background: #0f172a; color: var(--line); border-left-color: var(--line); }
+    .nav-item .num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px;
+      background: #334155;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* ── メイン ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 0;
+    }
+
+    /* ── ヒーロー ── */
+    .hero {
+      background: linear-gradient(135deg, #059669 0%, var(--line) 60%, #4ade80 100%);
+      color: #fff;
+      padding: 56px 60px 48px;
+    }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    .hero p {
+      font-size: 16px;
+      opacity: 0.9;
+      max-width: 560px;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .hero-meta span {
+      font-size: 12px;
+      background: rgba(255,255,255,0.25);
+      padding: 4px 14px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+
+    /* ── セクション ── */
+    .section {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 56px 60px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section:last-child { border-bottom: none; }
+
+    .chapter-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--line-dark);
+      margin-bottom: 6px;
+    }
+    .section h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .section-intro {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 32px 0 12px;
+      padding-left: 12px;
+      border-left: 3px solid var(--line);
+    }
+    .section h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 20px 0 8px;
+    }
+    .section p { margin-bottom: 12px; }
+    .section ul, .section ol {
+      padding-left: 20px;
+      margin-bottom: 12px;
+    }
+    .section li { margin-bottom: 4px; }
+
+    /* ── スクリーンショット ── */
+    .screenshot {
+      text-align: center;
+      margin: 32px 0;
+    }
+    .screenshot img {
+      max-width: 100%;
+      border-radius: 8px;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    .screenshot-placeholder {
+      background: #f1f5f9;
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      margin: 20px 0;
+      position: relative;
+    }
+    .screenshot-placeholder .ss-num {
+      position: absolute;
+      top: 12px; left: 12px;
+      background: var(--line);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 99px;
+    }
+    .screenshot-placeholder .ss-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .screenshot-placeholder .ss-hint {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    /* ── ステップリスト ── */
+    .steps { list-style: none; padding: 0; counter-reset: step; margin: 16px 0; }
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      gap: 14px;
+      margin-bottom: 16px;
+      align-items: flex-start;
+    }
+    .steps li::before {
+      content: counter(step);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 28px;
+      background: var(--line);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .steps li .step-body { flex: 1; }
+    .steps li strong { display: block; font-size: 15px; margin-bottom: 4px; }
+    .steps li p { font-size: 14px; color: var(--text-muted); margin: 0; }
+
+    /* ── インフォボックス ── */
+    .info-box {
+      background: var(--brand-bg);
+      border: 1px solid #a5d8df;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13px;
+      margin: 16px 0;
+    }
+    .info-box.line {
+      background: var(--line-bg);
+      border-color: var(--line-border);
+    }
+    .info-box.warn {
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+    .info-box.danger {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+    .info-box .label {
+      font-weight: 700;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .info-box.line .label { color: var(--line-dark); }
+    .info-box.warn .label { color: #92400e; }
+    .info-box.danger .label { color: #b91c1c; }
+    .info-box p { margin: 0; color: var(--text-muted); }
+
+    /* ── コードブロック ── */
+    .code-block {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-family: "Menlo", "Consolas", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      margin: 12px 0;
+      overflow-x: auto;
+      position: relative;
+    }
+    .code-block .code-label {
+      position: absolute;
+      top: 10px; right: 14px;
+      font-size: 10px;
+      color: #64748b;
+      font-family: sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .code-block span.hl { color: #7dd3da; }
+    .code-block span.val { color: #86efac; }
+
+    /* ── 比較テーブル ── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 16px 0;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .data-table th {
+      background: #f8fafc;
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #f9fafb; }
+
+    /* ── チェックリスト ── */
+    .checklist { list-style: none; padding: 0; margin: 12px 0; }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      font-size: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist .check {
+      width: 20px; height: 20px;
+      border: 2px solid var(--line);
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--line);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    /* ── バッジ ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge.green { background: #dcfce7; color: #166534; }
+    .badge.red   { background: #fee2e2; color: #991b1b; }
+    .badge.blue  { background: #dbeafe; color: #1e40af; }
+    .badge.gray  { background: #f3f4f6; color: #374151; }
+
+    /* ── 区切り ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 24px 0;
+    }
+
+    /* ── フッター ── */
+    .footer {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 60px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ── レスポンシブ ── */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; }
+      .hero, .section { padding: 32px 24px; }
+      .footer { padding: 24px; }
+    }
+    @media print {
+      .sidebar { display: none; }
+      .main { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ══ サイドバー ══ -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="app-name">SyncotBase</div>
+      <div class="app-sub">予約管理システム</div>
+      <div class="badge">LINE 連携 設定ガイド</div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">はじめに</div>
+      <a class="nav-item active" href="#overview"><span class="num">0</span>概要・準備物</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">LINE Developers 設定</div>
+      <a class="nav-item" href="#step1"><span class="num">1</span>アカウント作成</a>
+      <a class="nav-item" href="#step2"><span class="num">2</span>プロバイダー作成</a>
+      <a class="nav-item" href="#step3"><span class="num">3</span>Messaging API 有効化</a>
+      <a class="nav-item" href="#step4"><span class="num">4</span>トークン取得</a>
+      <a class="nav-item" href="#step5"><span class="num">5</span>Webhook 設定</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">SyncotBase 設定</div>
+      <a class="nav-item" href="#step6"><span class="num">6</span>管理画面に入力</a>
+      <a class="nav-item" href="#step7"><span class="num">7</span>友だち追加 URL</a>
+      <a class="nav-item" href="#step8"><span class="num">8</span>動作確認</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">困ったときは</div>
+      <a class="nav-item" href="#faq">よくある質問</a>
+      <a class="nav-item" href="#troubleshoot">エラー対処法</a>
+    </div>
+  </nav>
+
+  <!-- ══ メインコンテンツ ══ -->
+  <main class="main">
+
+    <!-- ヒーロー -->
+    <div class="hero">
+      <h1>LINE 連携 設定ガイド</h1>
+      <p>患者さんへの予約確定・リマインダー通知を LINE で自動送信するための設定手順を、画面キャプチャ付きでご説明します。</p>
+      <div class="hero-meta">
+        <span>所要時間 約 20〜30 分</span>
+        <span>難易度 ★★☆☆☆</span>
+        <span>対象 医院管理者</span>
+        <span>最終更新 2026年4月</span>
+      </div>
+    </div>
+
+
+    <!-- ── SECTION 0: 概要・準備物 ── -->
+    <section class="section" id="overview">
+      <div class="chapter-label">Chapter 0</div>
+      <h2>概要と準備するもの</h2>
+      <p class="section-intro">LINE 連携を設定すると、予約確定・変更・リマインダーが患者さんの LINE に自動で届くようになります。まず必要なものを確認しましょう。</p>
+
+      <h3>LINE 連携でできること</h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>通知タイミング</th>
+            <th>内容</th>
+            <th>対象</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>予約受付時</td>
+            <td>「予約を受け付けました。確認後にご連絡します」</td>
+            <td>患者さん</td>
+          </tr>
+          <tr>
+            <td>予約確定時</td>
+            <td>「予約が確定しました」＋日時・医院名</td>
+            <td>患者さん</td>
+          </tr>
+          <tr>
+            <td>前日リマインダー</td>
+            <td>「明日〇時にご予約があります」</td>
+            <td>患者さん</td>
+          </tr>
+          <tr>
+            <td>予約変更時</td>
+            <td>「予約日時が変更されました」</td>
+            <td>患者さん</td>
+          </tr>
+          <tr>
+            <td>暗証番号再発行時</td>
+            <td>「マイページの暗証番号が再発行されました」</td>
+            <td>患者さん</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>必要なもの</h3>
+      <ul class="checklist">
+        <li><span class="check">✓</span><span>LINE アカウント（個人のものでOK）— LINE Developers へのログインに使用</span></li>
+        <li><span class="check">✓</span><span>LINE 公式アカウント（無料プランで可）— 患者さんへのメッセージ送信元</span></li>
+        <li><span class="check">✓</span><span>SyncotBase の管理者アカウント — 設定を入力するために必要</span></li>
+        <li><span class="check">✓</span><span>パソコン（スマホではなくPCを推奨）</span></li>
+      </ul>
+
+      <div class="info-box warn">
+        <div class="label">⚠️ 注意</div>
+        <p>LINE 公式アカウントの「Messaging API」プランは<strong>無料で利用開始</strong>できますが、月1,000通を超えると有料になります（1通あたり約3円〜）。患者数が少ない段階は無料範囲内で収まる医院がほとんどです。</p>
+      </div>
+
+      <h3>設定の全体の流れ</h3>
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>LINE Developers にログイン・プロバイダー作成</strong>
+            <p>LINE の開発者向けサイトで組織（プロバイダー）を作ります。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>Messaging API を有効化してプロバイダーに紐づける</strong>
+            <p>LINE Official Account Manager の設定から Messaging API をオンにし、作成したプロバイダーと連携させます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>Channel Secret / Access Token を取得</strong>
+            <p>SyncotBase との連携に必要な認証キーを発行します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>Webhook URL を LINE に設定</strong>
+            <p>SyncotBase の URL を LINE 側に登録します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>SyncotBase 管理画面に入力して完了</strong>
+            <p>取得したキーを SyncotBase に登録します。</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+
+    <!-- ── SECTION 1: LINEアカウント ── -->
+    <section class="section" id="step1">
+      <div class="chapter-label">Step 1</div>
+      <h2>LINE Developers にログイン</h2>
+      <p class="section-intro">LINE Developers は、LINE のビジネス・開発機能を管理するサイトです。お持ちの LINE アカウントでログインできます。</p>
+
+      <h3>ログイン手順</h3>
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>LINE Developers を開く</strong>
+            <p>ブラウザで <strong>developers.line.biz</strong> にアクセスします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「ログイン」をクリック</strong>
+            <p>右上の「ログイン」ボタンから LINE アカウントでログインします。QRコードをスマホで読み取る方法が簡単です。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>開発者アカウントの登録</strong>
+            <p>初回ログイン時は名前・メールアドレスの入力が必要です。医院名または担当者名を入力してください。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 1-A.png" alt="スクリーンショット 1-A">
+      </div>
+
+
+    </section>
+
+
+    <!-- ── SECTION 2: プロバイダー作成 ── -->
+    <section class="section" id="step2">
+      <div class="chapter-label">Step 2</div>
+      <h2>プロバイダーを作成する</h2>
+      <p class="section-intro">プロバイダーは「送信者の組織」を表します。医院名で作成しておくと管理しやすくなります。</p>
+
+      <div class="info-box line">
+        <div class="label">💡 プロバイダーとは？</div>
+        <p>LINE でいう「会社・組織」の単位です。1つのプロバイダーの中に複数のチャンネルを作れます。医院名で1つ作れば十分です。</p>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>コンソール画面で「新規プロバイダー作成」</strong>
+            <p>ログイン後のコンソール画面で「プロバイダーを作成する」ボタンをクリックします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>プロバイダー名を入力</strong>
+            <p>医院名（例：「○○整骨院」）を入力して「作成」をクリックします。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 2-A.png" alt="スクリーンショット 2-A">
+      </div>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 2-B.png" alt="スクリーンショット 2-B">
+      </div>
+    </section>
+
+
+    <!-- ── SECTION 3: Messaging API 有効化 ── -->
+    <section class="section" id="step3">
+      <div class="chapter-label">Step 3</div>
+      <h2>Messaging API を有効化してプロバイダーに紐づける</h2>
+      <p class="section-intro">LINE Developers のプロバイダーからチャンネル作成を開始し、LINE Official Account Manager で既存の公式アカウントに Messaging API を有効化します。</p>
+
+      <h3>3-1. LINE Developers からチャンネル作成を開始</h3>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>Step 2 で作成したプロバイダーを開く</strong>
+            <p>コンソール左メニューからプロバイダー名をクリックし、「チャンネル設定」タブを表示します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Messaging API」アイコンをクリック</strong>
+            <p>「チャンネルを作成するには、チャンネルの種類を選択します」という画面で <strong>Messaging API</strong> のアイコンをクリックします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「LINE公式アカウントを作成する」ボタンをクリック</strong>
+            <p>「LINE DevelopersコンソールからMessaging APIチャンネルを直接作成することはできなくなりました」という画面が表示されます。緑色の <strong>「LINE公式アカウントを作成する」</strong> ボタンをクリックします。<br>
+            <span style="font-size:13px;color:#6b7280;">※ すでに公式アカウントをお持ちの場合も、このボタンから LINE Official Account Manager へ移動します。</span></p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 3-A.png" alt="スクリーンショット 3-A">
+      </div>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 3-B.png" alt="スクリーンショット 3-B">
+      </div>
+
+      <div class="divider"></div>
+
+      <h3>3-2. LINE Official Account Manager で Messaging API を有効化</h3>
+      <p>ボタンをクリックすると <strong>account.line.biz</strong>（LINE Official Account Manager）が開きます。以下の手順で既存の公式アカウントに Messaging API を有効化します。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>自院の公式アカウントを選択</strong>
+            <p>ホーム画面にアカウント一覧が表示されます。連携したい医院のアカウントをクリックして開きます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>左メニューの「設定」をクリック</strong>
+            <p>画面左下または左メニューにある「設定（歯車アイコン）」をクリックします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Messaging API」メニューを開く</strong>
+            <p>設定メニューの一覧から「<strong>Messaging API</strong>」をクリックします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Messaging APIを利用する」ボタンをクリック</strong>
+            <p>Messaging API の説明画面が表示されます。「<strong>Messaging APIを利用する</strong>」ボタンをクリックします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>プロバイダーを選択する</strong>
+            <p>「プロバイダーを選択してください」のドロップダウンから、<strong>Step 2 で作成したプロバイダー</strong>（医院名）を選びます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「同意する」→「OK」で確定</strong>
+            <p>利用規約への同意確認と、確認ダイアログが表示されます。内容を確認して進めます。<strong>一度紐づけると後から変更できない</strong>ため、プロバイダー名を必ず確認してください。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>LINE Developers でチャンネルを確認</strong>
+            <p>LINE Developers（developers.line.biz）のコンソールに戻り、プロバイダーの中に <strong>Messaging API チャンネルが追加されていれば完了</strong>です。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="info-box danger">
+        <div class="label">🔴 注意：プロバイダーの紐づけは変更不可</div>
+        <p>一度プロバイダーに紐づけると後から変更できません。Step 2 で作成した正しいプロバイダー名になっているか、必ず確認してから「OK」を押してください。</p>
+      </div>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 3-C.png" alt="スクリーンショット 3-C">
+      </div>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 3-D.png" alt="スクリーンショット 3-D">
+      </div>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 3-E.png" alt="スクリーンショット 3-E">
+      </div>
+    </section>
+
+
+    <!-- ── SECTION 4: トークン取得 ── -->
+    <section class="section" id="step4">
+      <div class="chapter-label">Step 4</div>
+      <h2>Channel Secret と Access Token を取得する</h2>
+      <p class="section-intro">SyncotBase と LINE を繋ぐための「認証キー」を2種類取得します。この手順が最も重要です。</p>
+
+      <h3>4-1. Channel Secret（チャンネルシークレット）の確認</h3>
+      <p>Channel Secret はチャンネル作成後に自動で発行されています。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>「チャンネル基本設定」タブを開く</strong>
+            <p>チャンネル設定画面の上部にあるタブから「チャンネル基本設定」をクリックします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Channel secret」欄を探す</strong>
+            <p>ページを少し下にスクロールすると「Channel secret」という項目があります。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>値をコピーしてメモしておく</strong>
+            <p>右側の「コピー」ボタンを押してコピーします。テキストエディタ等に貼り付けて保管してください。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 4-A.png" alt="スクリーンショット 4-A">
+      </div>
+
+      <div class="divider"></div>
+
+      <h3>4-2. Channel Access Token（アクセストークン）の発行</h3>
+      <p>Access Token は手動で「発行」操作が必要です。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>「Messaging API 設定」タブを開く</strong>
+            <p>画面上部のタブから「Messaging API 設定」をクリックします（「チャンネル基本設定」の隣にあります）。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>ページ下部の「チャンネルアクセストークン」欄を探す</strong>
+            <p>ページをスクロールして「チャンネルアクセストークン（長期）」という欄を探します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「発行」ボタンをクリック</strong>
+            <p>「発行」ボタンを押すと長い文字列が表示されます。これがアクセストークンです。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>値をコピーしてメモしておく</strong>
+            <p>右側のコピーボタンでコピーし、テキストエディタに保管します。<strong>このトークンは再表示できない</strong>ため、必ず保管してください。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="info-box danger">
+        <div class="label">🔴 重要：トークンの取り扱い</div>
+        <p>Channel Secret と Access Token は <strong>絶対に第三者に教えないでください</strong>。知られると悪用される可能性があります。メールへの貼り付けや SNS への投稿は厳禁です。</p>
+      </div>
+
+      <div class="screenshot-placeholder">
+        <div class="ss-num">スクリーンショット 4-B</div>
+        <div class="ss-label">「Messaging API 設定」タブ</div>
+        <div class="ss-hint">チャンネル基本設定の隣にあるタブをクリックします</div>
+      </div>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 4-C.png" alt="スクリーンショット 4-C">
+      </div>
+
+      <div class="info-box">
+        <div class="label">📋 この時点で手元に用意できているもの</div>
+        <p>✅ Channel secret（チャンネルシークレット）<br>
+           ✅ Channel access token（チャンネルアクセストークン）</p>
+      </div>
+    </section>
+
+
+    <!-- ── SECTION 5: Webhook 設定 ── -->
+    <section class="section" id="step5">
+      <div class="chapter-label">Step 5</div>
+      <h2>Webhook URL を LINE に設定する</h2>
+      <p class="section-intro">患者さんが友だち追加したり、マイページ連携する際のイベントを SyncotBase が受け取るための URL を設定します。</p>
+
+      <h3>Webhook URL の確認（SyncotBase 管理画面）</h3>
+      <p>まず、SyncotBase 側で発行されている Webhook URL を確認します。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>SyncotBase 管理画面にログイン</strong>
+            <p>システム管理者から共有された URL（例：<code>syncotbase.jp/admin</code>）にアクセスします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「テナント一覧」→ 医院名をクリック</strong>
+            <p>自院の名前をクリックして詳細ページを開きます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「LINE 連携設定」欄の Webhook URL をコピー</strong>
+            <p>「Webhook URL」の右にある「コピー」ボタンを押します。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="code-block">
+        <div class="code-label">Webhook URL の形式</div>
+        <span class="hl">https://</span><span class="val">syncotbase.jp</span><span class="hl">/api/webhook/line/</span><span class="val">{医院のID}</span>
+      </div>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 5-A.png" alt="スクリーンショット 5-A">
+      </div>
+
+      <div class="divider"></div>
+
+      <h3>LINE Developers に Webhook URL を貼り付ける</h3>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>LINE Developers の「Messaging API 設定」タブへ戻る</strong>
+            <p>ブラウザで LINE Developers を開き、先ほどのチャンネルを選択します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Webhook URL」欄に貼り付ける</strong>
+            <p>「Webhook URL」の入力欄に、コピーした URL を貼り付けます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「更新」ボタンをクリック</strong>
+            <p>入力欄の右にある「更新」ボタンを押して保存します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Webhookの利用」を ON にする</strong>
+            <p>Webhook URL 欄のすぐ下に「Webhookの利用」というトグルがあります。必ず <strong class="badge green">ON</strong> にしてください。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「検証」ボタンで疎通確認</strong>
+            <p>「検証」ボタンを押して「成功」と表示されれば接続完了です。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="info-box warn">
+        <div class="label">⚠️ 「応答メッセージ」は OFF にする</div>
+        <p>Messaging API 設定の「応答設定」欄にある「応答メッセージ」と「あいさつメッセージ」は <strong class="badge red">OFF</strong> にしておくことを推奨します。ONのままだと、患者さんが友だち追加した際にデフォルトのメッセージが自動返信されてしまいます。</p>
+      </div>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 5-B.png" alt="スクリーンショット 5-B">
+      </div>
+
+
+    </section>
+
+
+    <!-- ── SECTION 6: SyncotBase に入力 ── -->
+    <section class="section" id="step6">
+      <div class="chapter-label">Step 6</div>
+      <h2>SyncotBase 管理画面にキーを入力する</h2>
+      <p class="section-intro">手順4で取得した2つのキーを SyncotBase に登録します。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>SyncotBase 管理画面で自院の詳細ページを開く</strong>
+            <p>「テナント一覧」から自院の「編集」ボタンをクリックします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「LINE 連携設定」欄を探す</strong>
+            <p>ページをスクロールすると「LINE 連携設定」というセクションが表示されます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Channel Secret」を入力</strong>
+            <p>手順4-1でコピーした Channel secret を貼り付けます。👁️ アイコンで表示・非表示を切り替えられます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Channel Access Token」を入力</strong>
+            <p>手順4-2でコピーしたアクセストークンを貼り付けます。長い文字列ですが全部貼り付けてください。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「保存する」ボタンをクリック</strong>
+            <p>ページ下部の「保存する」ボタンを押します。「保存しました」と表示されれば完了です。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <img src="./images/スクリーンショット 6-A.png" alt="スクリーンショット 6-A">
+      </div>
+
+
+    </section>
+
+
+    <!-- ── SECTION 7: 友だち追加 URL ── -->
+    <section class="section" id="step7">
+      <div class="chapter-label">Step 7</div>
+      <h2>友だち追加 URL を設定する（推奨）</h2>
+      <p class="section-intro">患者さんが簡単に友だち追加できるよう、LINE 公式アカウントの友だち追加 URL を登録しておきましょう。これにより予約完了画面に「友だち追加」ボタンが自動表示されます。</p>
+
+      <h3>友だち追加 URL の確認方法</h3>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>LINE Official Account Manager にログイン</strong>
+            <p>account.line.biz にアクセスして、先ほど作成したアカウントを開きます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「設定」→「アカウント情報」を開く</strong>
+            <p>左メニューの「設定」からアカウント情報を確認します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「基本 ID」を確認</strong>
+            <p>「@」で始まる英数字の ID が表示されています（例：<code>@abc12345</code>）。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>友だち追加 URL を作成</strong>
+            <p>基本 ID を使って以下の形式の URL を作ります。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="code-block">
+        <div class="code-label">友だち追加 URL の形式</div>
+        <span class="hl">https://line.me/R/ti/p/</span><span class="val">@abc12345</span>
+      </div>
+
+      <h3>SyncotBase への登録</h3>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>SyncotBase の LINE 連携設定欄を開く</strong>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「友だち追加URL」欄に貼り付け</strong>
+            <p>作成した URL を「友だち追加URL（任意）」欄に貼り付けます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「保存する」をクリック</strong>
+          </div>
+        </li>
+      </ol>
+
+      <div class="info-box line">
+        <div class="label">💡 友だち追加 URL の効果</div>
+        <p>この URL を設定すると、患者さんがネット予約を完了した画面に「LINE で友だち追加する」ボタンが自動的に表示されます。友だち追加してもらうことで、以後の通知が LINE に届くようになります。</p>
+      </div>
+
+
+    </section>
+
+
+    <!-- ── SECTION 8: 動作確認 ── -->
+    <section class="section" id="step8">
+      <div class="chapter-label">Step 8</div>
+      <h2>動作確認をする</h2>
+      <p class="section-intro">すべての設定が完了したら、実際に通知が届くか確認しましょう。</p>
+
+      <h3>確認手順</h3>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>LINE 公式アカウントを友だち追加する</strong>
+            <p>設定した友だち追加 URL から、自分のスマホの LINE で友だち追加します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>SyncotBase で患者情報に LINE ID を紐づける</strong>
+            <p>患者さんがマイページの「LINE 連携」機能から連携するか、管理者が患者詳細画面から LINE ユーザー ID を設定します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>テスト予約を作成して承認する</strong>
+            <p>患者詳細ページから予約を作成し、「確定」ボタンを押します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>LINE にメッセージが届いたか確認</strong>
+            <p>スマホの LINE アプリを開き、SyncotBase からの通知メッセージが届いていれば設定完了です 🎉</p>
+          </div>
+        </li>
+      </ol>
+
+
+
+      <h3>設定完了チェックリスト</h3>
+      <ul class="checklist">
+        <li><span class="check">✓</span><span>LINE Developers でプロバイダー・チャンネルを作成した</span></li>
+        <li><span class="check">✓</span><span>Channel Secret をコピーして SyncotBase に入力した</span></li>
+        <li><span class="check">✓</span><span>Channel Access Token を発行してコピー、SyncotBase に入力した</span></li>
+        <li><span class="check">✓</span><span>Webhook URL を LINE Developers に設定した</span></li>
+        <li><span class="check">✓</span><span>「Webhookの利用」を ON にした</span></li>
+        <li><span class="check">✓</span><span>「検証」ボタンで「成功」を確認した</span></li>
+        <li><span class="check">✓</span><span>（推奨）友だち追加 URL を SyncotBase に設定した</span></li>
+        <li><span class="check">✓</span><span>テスト通知を送って LINE に届くことを確認した</span></li>
+      </ul>
+    </section>
+
+
+    <!-- ── SECTION: FAQ ── -->
+    <section class="section" id="faq">
+      <div class="chapter-label">よくある質問</div>
+      <h2>FAQ</h2>
+      <p class="section-intro">設定中によくある疑問をまとめました。</p>
+
+      <h3>Q. LINE 公式アカウントは有料ですか？</h3>
+      <p>月1,000通まで無料です。月の予約件数が少ない医院なら無料範囲内に収まります。1,000通を超える場合は「ライトプラン（月5,000円〜）」などが必要になります。詳しくは LINE 公式の料金ページをご確認ください。</p>
+
+      <h3>Q. Channel Secret と Access Token はどこかに保管すべきですか？</h3>
+      <p>SyncotBase に入力した後は、システム上で安全に管理されます。ただし、トークンを再発行した場合は新しい値に更新する必要があるため、<strong>安全な場所（パスワードマネージャーなど）に保管しておくことを推奨</strong>します。</p>
+
+      <h3>Q. 通知を LINE ではなくメールにしたいです</h3>
+      <p>SyncotBase の設定画面でメール通知の ON/OFF を切り替えられます。LINE・メールの両方を同時に有効にすることも可能です。</p>
+
+      <h3>Q. 複数の院で LINE 連携したい</h3>
+      <p>院ごとに別のチャンネルを作成し、それぞれの Channel Secret / Access Token を各院の SyncotBase 設定に入力してください。同じプロバイダーの下に複数チャンネルを作成できます。</p>
+
+      <h3>Q. LINE の友だちになっていない患者さんには届きますか？</h3>
+      <p>届きません。LINE 通知を受け取るには、患者さんが LINE 公式アカウントを「友だち追加」し、かつマイページで LINE 連携をしている必要があります。患者さんに友だち追加を案内するため、受付でのQRコード掲示や、LINE 連携 URL の共有をお勧めします。</p>
+
+      <h3>Q. Access Token を間違えて削除してしまいました</h3>
+      <p>LINE Developers の「Messaging API 設定」タブで「再発行」ボタンから新しいトークンを発行できます。発行後、SyncotBase の管理画面で新しい値に更新してください。古いトークンは即時無効になります。</p>
+    </section>
+
+
+    <!-- ── SECTION: エラー対処 ── -->
+    <section class="section" id="troubleshoot">
+      <div class="chapter-label">エラー対処法</div>
+      <h2>エラーが発生した場合</h2>
+      <p class="section-intro">よくあるエラーと対処法をまとめました。</p>
+
+      <h3>「検証」で「失敗」と表示される</h3>
+      <table class="data-table">
+        <thead>
+          <tr><th>考えられる原因</th><th>対処法</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Webhook URL が間違っている</td>
+            <td>SyncotBase の管理画面から再度 Webhook URL をコピーし、貼り直す</td>
+          </tr>
+          <tr>
+            <td>SyncotBase にキーが未入力</td>
+            <td>Channel Secret と Access Token が保存されているか確認する</td>
+          </tr>
+          <tr>
+            <td>「Webhookの利用」が OFF</td>
+            <td>LINE Developers の設定で「Webhookの利用」を ON にする</td>
+          </tr>
+          <tr>
+            <td>Channel Access Token が失効している</td>
+            <td>LINE Developers で再発行し、SyncotBase の設定を更新する</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>患者さんの LINE に通知が届かない</h3>
+      <table class="data-table">
+        <thead>
+          <tr><th>考えられる原因</th><th>対処法</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>患者さんが友だち追加していない</td>
+            <td>友だち追加 URL または QRコードを案内する</td>
+          </tr>
+          <tr>
+            <td>患者情報に LINE ユーザー ID が紐づいていない</td>
+            <td>患者さんにマイページから LINE 連携を実施してもらう</td>
+          </tr>
+          <tr>
+            <td>患者さんが LINE 通知をブロックしている</td>
+            <td>患者さんに LINE アプリの通知設定を確認してもらう</td>
+          </tr>
+          <tr>
+            <td>Channel Access Token の入力が一部欠けている</td>
+            <td>SyncotBase の設定を開き、トークンを再度コピー&amp;貼り付けして保存する</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="info-box">
+        <div class="label">📞 お問い合わせ</div>
+        <p>上記を試しても解決しない場合は、SyncotBase の運営サポートまでお問い合わせください。エラーの内容・発生状況をできる限り詳しくお知らせいただけると、迅速に対応できます。</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>SyncotBase LINE 連携 設定ガイド — 2026年4月版</p>
+      <p style="margin-top:4px; color:#9ca3af; font-size:12px;">このドキュメントは SyncotBase の利用医院向けに作成されたものです。</p>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+  // サイドバーのアクティブ項目を自動ハイライト
+  const navItems = document.querySelectorAll('.nav-item');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navItems.forEach(n => n.classList.remove('active'));
+        const id = e.target.id;
+        const match = document.querySelector(`.nav-item[href="#${id}"]`);
+        if (match) match.classList.add('active');
+      }
+    });
+  }, { threshold: 0.4 });
+  document.querySelectorAll('.section[id]').forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>
