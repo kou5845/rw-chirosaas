@@ -11,6 +11,7 @@
 import { useActionState } from "react";
 import { User, Phone, Mail, CheckCircle2, AlertCircle, Loader2, Info } from "lucide-react";
 import { updatePatientProfile, type UpdateProfileState } from "./update-profile-action";
+import { PrivacyPolicyLink } from "@/components/PrivacyPolicyLink";
 
 type Props = {
   tenantSlug:  string;
@@ -150,6 +151,9 @@ export function ProfileForm({ tenantSlug, displayName, nameKana, phone, email }:
           "変更を保存する"
         )}
       </button>
+
+      {/* ── 個人情報保護方針リンク ── */}
+      <PrivacyPolicyLink />
     </form>
   );
 }
