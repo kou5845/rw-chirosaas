@@ -196,6 +196,41 @@ export async function updateLineSettings(
   return { success: true };
 }
 
+// ── LINE 連携解除 ──────────────────────────────────────────────────────
+
+export type DisconnectLineState = {
+  success?: boolean;
+  errors?: { general?: string };
+} | null;
+
+export async function disconnectLineSettings(
+  _prev: DisconnectLineState,
+  formData: FormData
+): Promise<DisconnectLineState> {
+  const tenantSlug = formData.get("tenantSlug") as string;
+  if (!tenantSlug) return { errors: { general: "テナント情報が不正です。" } };
+
+  // CLAUDE.md 絶対ルール: DB照合でtenantIdを確定
+  const tenant = await prisma.tenant.findUnique({
+    where:  { subdomain: tenantSlug },
+    select: { id: true },
+  });
+  if (!tenant) return { errors: { general: "テナントが見つかりません。" } };
+
+  try {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data:  { lineChannelSecret: null, lineChannelAccessToken: null, lineFriendUrl: null },
+    });
+  } catch (err) {
+    console.error("[disconnectLineSettings] DB error:", err);
+    return { errors: { general: "解除中にエラーが発生しました。" } };
+  }
+
+  revalidatePath(`/${tenantSlug}/settings`);
+  return { success: true };
+}
+
 // ── メールカスタムメッセージ更新（プロプラン限定）────────────────────────
 
 export type EmailCustomMessageState = {
