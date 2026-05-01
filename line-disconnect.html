@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LINE連携 解除ガイド — SyncotBase</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      font-size: 15px;
+      line-height: 1.8;
+      color: #1f2937;
+      background: #f9fafb;
+    }
+
+    :root {
+      --brand:       #5BBAC4;
+      --brand-dark:  #3d9aa6;
+      --brand-light: #e8f7f9;
+      --brand-bg:    #f0fbfc;
+      --line:        #06C755;
+      --line-dark:   #05a849;
+      --line-bg:     #f0fdf4;
+      --line-border: #bbf7d0;
+      --danger:      #ef4444;
+      --danger-bg:   #fef2f2;
+      --danger-border:#fecaca;
+      --text:        #1f2937;
+      --text-muted:  #6b7280;
+      --border:      #e5e7eb;
+      --sidebar-w:   260px;
+    }
+
+    .layout { display: flex; min-height: 100vh; }
+
+    /* ── サイドバー ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: #1e293b;
+      color: #e2e8f0;
+      position: fixed;
+      top: 0; left: 0;
+      overflow-y: auto;
+      z-index: 100;
+    }
+    .sidebar-logo {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid #334155;
+    }
+    .sidebar-logo .app-name {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.02em;
+    }
+    .sidebar-logo .app-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .sidebar-logo .badge {
+      display: inline-block;
+      background: #ef4444;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 99px;
+      margin-top: 6px;
+    }
+    .nav-group { padding: 16px 0 0; }
+    .nav-group-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748b;
+      padding: 0 20px 6px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      font-size: 13px;
+      color: #cbd5e1;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .nav-item:hover { background: #334155; color: #fff; }
+    .nav-item.active { background: #0f172a; color: #f87171; border-left-color: #ef4444; }
+    .nav-item .num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px;
+      background: #334155;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* ── メイン ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+    }
+
+    /* ── ヒーロー ── */
+    .hero {
+      background: linear-gradient(135deg, #7f1d1d 0%, #ef4444 60%, #f87171 100%);
+      color: #fff;
+      padding: 56px 60px 48px;
+    }
+    .hero .eyebrow {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      opacity: 0.75;
+      margin-bottom: 12px;
+    }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    .hero p {
+      font-size: 16px;
+      opacity: 0.9;
+      max-width: 560px;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .hero-meta span {
+      font-size: 12px;
+      background: rgba(255,255,255,0.2);
+      padding: 4px 14px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+
+    /* ── セクション ── */
+    .section {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 56px 60px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section:last-child { border-bottom: none; }
+
+    .chapter-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #ef4444;
+      margin-bottom: 6px;
+    }
+    .section h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .section-intro {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 32px 0 12px;
+      padding-left: 12px;
+      border-left: 3px solid #ef4444;
+    }
+    .section h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 20px 0 8px;
+    }
+    .section p { margin-bottom: 12px; }
+    .section ul, .section ol {
+      padding-left: 20px;
+      margin-bottom: 12px;
+    }
+    .section li { margin-bottom: 4px; }
+
+    /* ── スクリーンショット ── */
+    .screenshot {
+      text-align: center;
+      margin: 28px 0;
+    }
+    .screenshot img {
+      max-width: 100%;
+      border-radius: 8px;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    }
+    .screenshot-caption {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+    .screenshot-placeholder {
+      background: #f1f5f9;
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      margin: 20px 0;
+      position: relative;
+    }
+    .screenshot-placeholder .ss-num {
+      position: absolute;
+      top: 12px; left: 12px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 99px;
+    }
+    .screenshot-placeholder .ss-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .screenshot-placeholder .ss-hint {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    /* ── ステップリスト ── */
+    .steps { list-style: none; padding: 0; counter-reset: step; margin: 16px 0; }
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      gap: 14px;
+      margin-bottom: 20px;
+      align-items: flex-start;
+    }
+    .steps li::before {
+      content: counter(step);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 28px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .steps li .step-body { flex: 1; }
+    .steps li strong { display: block; font-size: 15px; margin-bottom: 4px; color: var(--text); }
+    .steps li p { font-size: 14px; color: var(--text-muted); margin: 0 0 6px; }
+
+    /* ── インフォボックス ── */
+    .info-box {
+      background: var(--brand-bg);
+      border: 1px solid #a5d8df;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13px;
+      margin: 16px 0;
+    }
+    .info-box.line {
+      background: var(--line-bg);
+      border-color: var(--line-border);
+    }
+    .info-box.warn {
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+    .info-box.danger {
+      background: var(--danger-bg);
+      border-color: var(--danger-border);
+    }
+    .info-box.ok {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+    .info-box .label {
+      font-weight: 700;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .info-box.line .label { color: var(--line-dark); }
+    .info-box.warn .label { color: #92400e; }
+    .info-box.danger .label { color: #b91c1c; }
+    .info-box.ok .label { color: #15803d; }
+    .info-box p, .info-box li { margin: 0 0 4px; color: var(--text-muted); }
+    .info-box ul { padding-left: 18px; }
+
+    /* ── チェックリスト ── */
+    .checklist { list-style: none; padding: 0; margin: 12px 0; }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li .ck {
+      width: 18px; height: 18px;
+      border: 2px solid #d1d5db;
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    /* ── 比較テーブル ── */
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 14px;
+    }
+    .compare-table th {
+      background: #f8fafc;
+      font-weight: 700;
+      padding: 10px 16px;
+      text-align: left;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .compare-table td {
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .compare-table tr:hover td { background: #f9fafb; }
+    .tag-yes { display: inline-flex; align-items: center; gap: 4px; color: #15803d; font-weight: 600; }
+    .tag-no  { display: inline-flex; align-items: center; gap: 4px; color: #b91c1c; font-weight: 600; }
+    .tag-warn { display: inline-flex; align-items: center; gap: 4px; color: #92400e; font-weight: 600; }
+
+    /* ── フロー図 ── */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    .flow-box {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      text-align: center;
+      min-width: 120px;
+    }
+    .flow-box.danger { background: var(--danger-bg); border-color: var(--danger-border); color: #b91c1c; }
+    .flow-box.ok { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+    .flow-arrow {
+      font-size: 20px;
+      color: #94a3b8;
+      padding: 0 8px;
+    }
+
+    /* ── アコーディオン（FAQ）── */
+    details { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }
+    details summary {
+      padding: 14px 18px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::after { content: "＋"; color: #94a3b8; font-weight: 400; }
+    details[open] summary::after { content: "－"; }
+    details[open] summary { border-bottom: 1px solid var(--border); }
+    .faq-body {
+      padding: 16px 18px;
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.8;
+    }
+
+    /* ── フッター ── */
+    .footer {
+      background: #1e293b;
+      color: #64748b;
+      text-align: center;
+      padding: 28px;
+      font-size: 12px;
+      margin-left: 0;
+    }
+
+    /* ── レスポンシブ ── */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; }
+      .hero { padding: 36px 24px 32px; }
+      .hero h1 { font-size: 24px; }
+      .section { padding: 36px 24px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ────────────── サイドバー ────────────── -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="app-name">SyncotBase</div>
+      <div class="app-sub">管理者向けマニュアル</div>
+      <div class="badge">LINE解除</div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">はじめに</div>
+      <a href="#overview" class="nav-item active">
+        <span class="num">0</span> 解除前に確認
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">SyncotBase 側</div>
+      <a href="#step1" class="nav-item">
+        <span class="num">1</span> 設定画面を開く
+      </a>
+      <a href="#step2" class="nav-item">
+        <span class="num">2</span> 解除ボタンを押す
+      </a>
+      <a href="#step3" class="nav-item">
+        <span class="num">3</span> 解除の確認
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">LINE 側（任意）</div>
+      <a href="#step4" class="nav-item">
+        <span class="num">4</span> Webhook を無効化
+      </a>
+      <a href="#step5" class="nav-item">
+        <span class="num">5</span> Access Token 失効
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">その後</div>
+      <a href="#after" class="nav-item">解除後の状態</a>
+      <a href="#reconnect" class="nav-item">再連携する場合</a>
+      <a href="#faq" class="nav-item">よくある質問</a>
+    </div>
+  </nav>
+
+  <!-- ────────────── メインコンテンツ ────────────── -->
+  <main class="main">
+
+    <!-- ヒーロー -->
+    <div class="hero">
+      <div class="eyebrow">SyncotBase — 管理者向けマニュアル</div>
+      <h1>LINE連携 解除ガイド</h1>
+      <p>SyncotBase と LINE Official Account の連携を安全に解除する手順を説明します。</p>
+      <div class="hero-meta">
+        <span>所要時間：約 5 分</span>
+        <span>対象：院長・管理者</span>
+        <span>難易度：かんたん</span>
+      </div>
+    </div>
+
+    <!-- ────── Section 0: 解除前に確認 ────── -->
+    <section class="section" id="overview">
+      <div class="chapter-label">Chapter 0</div>
+      <h2>解除前に確認しておくこと</h2>
+      <p class="section-intro">解除を実行する前に、以下の影響範囲を必ずご確認ください。</p>
+
+      <h3>解除後に起きること</h3>
+
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>項目</th>
+            <th>解除前（連携中）</th>
+            <th>解除後</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>予約確定通知</td>
+            <td><span class="tag-yes">✔ LINEで送信</span></td>
+            <td><span class="tag-no">✘ 送信されない</span></td>
+          </tr>
+          <tr>
+            <td>リマインダー通知</td>
+            <td><span class="tag-yes">✔ LINEで送信</span></td>
+            <td><span class="tag-no">✘ 送信されない</span></td>
+          </tr>
+          <tr>
+            <td>キャンセル通知</td>
+            <td><span class="tag-yes">✔ LINEで送信</span></td>
+            <td><span class="tag-no">✘ 送信されない</span></td>
+          </tr>
+          <tr>
+            <td>メール通知</td>
+            <td>設定に依存</td>
+            <td>変わらず送信</td>
+          </tr>
+          <tr>
+            <td>患者・予約データ</td>
+            <td>—</td>
+            <td><span class="tag-yes">✔ 削除されない</span></td>
+          </tr>
+          <tr>
+            <td>LINE公式アカウント</td>
+            <td>—</td>
+            <td><span class="tag-yes">✔ そのまま存在</span></td>
+          </tr>
+          <tr>
+            <td>患者の友だち登録</td>
+            <td>—</td>
+            <td><span class="tag-yes">✔ 解除されない</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="info-box warn">
+        <div class="label">⚠️ 注意</div>
+        <p>解除後は即座に LINE 通知が停止します。患者への通知手段がメールのみになるため、解除の前にメール通知が有効になっているか確認してください。</p>
+      </div>
+
+      <div class="info-box ok">
+        <div class="label">✔ 安心ポイント</div>
+        <ul>
+          <li>予約・患者データは一切削除されません</li>
+          <li>解除後も再連携できます（LINE_SETUP_GUIDE を参照）</li>
+          <li>患者が LINE で友だち追加したままの状態は変わりません</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ────── Section 1: 設定画面を開く ────── -->
+    <section class="section" id="step1">
+      <div class="chapter-label">Step 1 — SyncotBase</div>
+      <h2>設定画面を開く</h2>
+      <p class="section-intro">SyncotBase の管理画面にログインし、設定ページの LINE タブを開きます。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>管理画面にログインする</strong>
+            <p>SyncotBase の管理画面（例：<code>https://syncotbase.com/あなたの医院ID/settings</code>）にアクセスしてください。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>左サイドバーの「設定」をクリック</strong>
+            <p>歯車アイコンの「設定」メニューを選択します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「LINE連携」タブを選択する</strong>
+            <p>設定ページ上部のタブ一覧から「LINE連携」を選択してください。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <div class="screenshot-placeholder">
+          <div class="ss-num">スクリーンショット 1</div>
+          <div class="ss-label">設定ページ — LINE連携タブ</div>
+          <div class="ss-hint">Channel Secret・Access Token が入力済みの状態</div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <div class="label">💡 ヒント</div>
+        <p>LINE連携タブを開くと、現在設定されている Channel Secret・Access Token・友だち追加URL が表示されています（Channel Secret は伏せ字表示）。これらが表示されていれば連携中の状態です。</p>
+      </div>
+    </section>
+
+    <!-- ────── Section 2: 解除ボタン ────── -->
+    <section class="section" id="step2">
+      <div class="chapter-label">Step 2 — SyncotBase</div>
+      <h2>「LINE連携を解除する」ボタンを押す</h2>
+      <p class="section-intro">フォーム下部の赤いボタンをクリックします。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>ページ下部の赤いボタンを確認する</strong>
+            <p>LINE連携設定フォームの一番下に <strong style="color:#b91c1c">「LINE連携を解除する」</strong> というボタンが表示されています。このボタンは <strong>連携が設定済みのときのみ</strong> 表示されます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>ボタンをクリックする</strong>
+            <p>クリックすると確認ダイアログが表示されます。この時点ではまだ解除されません。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <div class="screenshot-placeholder">
+          <div class="ss-num">スクリーンショット 2</div>
+          <div class="ss-label">「LINE連携を解除する」ボタン（赤色・左下）</div>
+          <div class="ss-hint">右側には「保存する」ボタンが並んで表示される</div>
+        </div>
+      </div>
+
+      <div class="info-box warn">
+        <div class="label">⚠️ 注意</div>
+        <p>「LINE連携を解除する」ボタンと「保存する」ボタンは別々の操作です。「保存する」を押しても解除はされません。</p>
+      </div>
+    </section>
+
+    <!-- ────── Section 3: 確認ダイアログ ────── -->
+    <section class="section" id="step3">
+      <div class="chapter-label">Step 3 — SyncotBase</div>
+      <h2>確認ダイアログで「解除する」を押す</h2>
+      <p class="section-intro">確認ダイアログで内容を確認し、解除を実行します。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>確認ダイアログの内容を確認する</strong>
+            <p>「Channel Secret・Access Token・友だち追加URLをすべて削除します。解除後はLINE通知が送信されなくなります。」と表示されます。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「解除する」ボタンをクリックする</strong>
+            <p>赤いボタン「解除する」をクリックしてください。キャンセルしたい場合は「キャンセル」を押します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「LINE連携を解除しました」と表示されることを確認</strong>
+            <p>画面上部に緑色の成功メッセージが表示されれば解除完了です。Channel Secret・Access Token フィールドが空になっていることを確認してください。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <div class="screenshot-placeholder">
+          <div class="ss-num">スクリーンショット 3</div>
+          <div class="ss-label">確認ダイアログ</div>
+          <div class="ss-hint">「解除する」（赤）と「キャンセル」の2つのボタン</div>
+        </div>
+      </div>
+
+      <div class="screenshot">
+        <div class="screenshot-placeholder">
+          <div class="ss-num">スクリーンショット 4</div>
+          <div class="ss-label">解除完了後の画面</div>
+          <div class="ss-hint">「LINE連携を解除しました」の緑色メッセージ＋フィールドが空</div>
+        </div>
+      </div>
+
+      <div class="info-box ok">
+        <div class="label">✔ ここまでで SyncotBase 側の解除は完了です</div>
+        <p>Step 4・5 は LINE 側の設定を整理したい場合のみ実施してください。セキュリティ上はなるべく実施することをおすすめします。</p>
+      </div>
+    </section>
+
+    <!-- ────── Section 4: Webhook 無効化 ────── -->
+    <section class="section" id="step4">
+      <div class="chapter-label">Step 4 — LINE側（推奨）</div>
+      <h2>LINE Developers で Webhook を無効化する</h2>
+      <p class="section-intro">SyncotBase 側の解除だけでも通知は止まりますが、LINE Developers コンソールでも Webhook を無効化しておくと、不要なリクエストが LINE から届かなくなります。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>LINE Developers コンソールにアクセスする</strong>
+            <p><code>https://developers.line.biz/</code> を開き、LINE アカウントでログインします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>対象の Channel を選択する</strong>
+            <p>Providers 一覧から、SyncotBase と連携していた Messaging API Channel を選択してください。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Messaging API」タブを開く</strong>
+            <p>Channel 詳細ページ上部のタブから「Messaging API」を選択します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Webhook settings」の「Use webhook」をオフにする</strong>
+            <p>「Webhook settings」セクションの「Use webhook」トグルを <strong>オフ（グレー）</strong> にしてください。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <div class="screenshot-placeholder">
+          <div class="ss-num">スクリーンショット 5</div>
+          <div class="ss-label">LINE Developers — Webhook settings</div>
+          <div class="ss-hint">「Use webhook」をオフにした状態</div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <div class="label">💡 補足</div>
+        <p>Webhook URL はそのまま残しておいても問題ありません。将来再連携するときに再利用できます。</p>
+      </div>
+    </section>
+
+    <!-- ────── Section 5: Access Token 失効 ────── -->
+    <section class="section" id="step5">
+      <div class="chapter-label">Step 5 — LINE側（セキュリティ強化・任意）</div>
+      <h2>Channel Access Token を失効させる</h2>
+      <p class="section-intro">SyncotBase から削除されたトークンをさらに LINE 側でも無効化することで、万一トークンが漏洩していた場合でも悪用されなくなります。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>「Messaging API」タブの「Channel access token」セクションを開く</strong>
+            <p>Step 4 で開いた「Messaging API」タブの下部にあります。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>「Reissue」ボタンをクリックする</strong>
+            <p>新しい Access Token が発行され、古いトークン（SyncotBase に設定していたもの）は <strong>30日後に自動的に失効</strong> します。即時失効させたい場合は「Revoke」ボタンを使います。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="screenshot">
+        <div class="screenshot-placeholder">
+          <div class="ss-num">スクリーンショット 6</div>
+          <div class="ss-label">LINE Developers — Channel access token セクション</div>
+          <div class="ss-hint">「Reissue」または「Revoke」ボタンの位置</div>
+        </div>
+      </div>
+
+      <div class="info-box warn">
+        <div class="label">⚠️ 注意</div>
+        <p>「Revoke」（即時失効）を行うと他のシステムとの連携も即座に切れます。SyncotBase のみと連携していた場合は問題ありませんが、他のサービスにも同じトークンを使っている場合は注意してください。</p>
+      </div>
+    </section>
+
+    <!-- ────── Section: 解除後の状態 ────── -->
+    <section class="section" id="after">
+      <div class="chapter-label">解除後の状態</div>
+      <h2>解除後の確認チェックリスト</h2>
+      <p class="section-intro">すべての手順が完了したら、以下を確認してください。</p>
+
+      <ul class="checklist">
+        <li>
+          <div class="ck"></div>
+          <div>SyncotBase の LINE連携設定ページで「LINE連携を解除しました」が表示された（または Channel Secret・Token フィールドが空になっている）</div>
+        </li>
+        <li>
+          <div class="ck"></div>
+          <div>（任意）LINE Developers で「Use webhook」をオフにした</div>
+        </li>
+        <li>
+          <div class="ck"></div>
+          <div>（任意）LINE Developers で Access Token を Reissue / Revoke した</div>
+        </li>
+        <li>
+          <div class="ck"></div>
+          <div>SyncotBase の通知設定でメール通知が有効になっていることを確認した</div>
+        </li>
+        <li>
+          <div class="ck"></div>
+          <div>患者への連絡手段の変更について、必要に応じて院内でアナウンスした</div>
+        </li>
+      </ul>
+
+      <div class="flow">
+        <div class="flow-box danger">LINE連携<br>設定済み</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">SyncotBase で解除</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">（任意）LINE側も設定</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box ok">LINE通知停止<br>データは保持</div>
+      </div>
+    </section>
+
+    <!-- ────── Section: 再連携 ────── -->
+    <section class="section" id="reconnect">
+      <div class="chapter-label">再連携する場合</div>
+      <h2>LINE連携を再設定するには</h2>
+      <p class="section-intro">解除後、再度 LINE 連携を設定したい場合は以下の手順で行えます。</p>
+
+      <ol class="steps">
+        <li>
+          <div class="step-body">
+            <strong>LINE Developers で Channel Access Token を再発行する</strong>
+            <p>Step 5 で Revoke した場合は新しいトークンが必要です。「Reissue」ボタンで再発行してください。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>LINE Developers で「Use webhook」をオンに戻す</strong>
+            <p>「Webhook settings」セクションの「Use webhook」トグルをオンにします。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-body">
+            <strong>SyncotBase の LINE連携設定に再入力する</strong>
+            <p>Channel Secret・Channel Access Token・友だち追加URL を再度入力し「保存する」をクリックします。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="info-box line">
+        <div class="label">📄 LINE連携セットアップガイドを参照</div>
+        <p>初回設定と同じ手順で再連携できます。詳しくは「LINE連携 設定ガイド（LINE_SETUP_GUIDE）」をご参照ください。</p>
+      </div>
+    </section>
+
+    <!-- ────── FAQ ────── -->
+    <section class="section" id="faq">
+      <div class="chapter-label">FAQ</div>
+      <h2>よくある質問</h2>
+      <p class="section-intro">解除に関してよくお問い合わせいただく内容です。</p>
+
+      <details>
+        <summary>解除すると患者のデータは消えますか？</summary>
+        <div class="faq-body">
+          <p>いいえ、消えません。予約データ・患者データ・カルテはすべてそのまま保持されます。解除されるのは「Channel Secret」「Channel Access Token」「友だち追加URL」の3つのフィールドのみです。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>解除後、患者の LINE アカウントとの友だち関係はどうなりますか？</summary>
+        <div class="faq-body">
+          <p>患者が LINE 公式アカウントを「友だち追加」した状態はそのまま維持されます。LINE 通知が届かなくなるだけで、友だち登録が解除されるわけではありません。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>解除後に SyncotBase から LINE 通知を再開したい場合は？</summary>
+        <div class="faq-body">
+          <p>LINE Developers コンソールで Channel Access Token を再発行し、SyncotBase の LINE連携設定ページに再入力するだけで再開できます。詳しくは「再連携する場合」のセクションを参照してください。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>「LINE連携を解除する」ボタンが表示されません</summary>
+        <div class="faq-body">
+          <p>このボタンは Channel Secret と Channel Access Token の両方が設定されている場合のみ表示されます。すでにどちらかが空になっている場合（= 実質的に未連携の状態）はボタンが表示されません。その場合、解除の必要はありません。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>解除後もメール通知は届きますか？</summary>
+        <div class="faq-body">
+          <p>LINE 解除はメール通知に影響しません。SyncotBase の「通知設定」でメール通知が有効になっていれば、引き続き患者へメールが届きます。解除前にメール通知が有効か確認することをおすすめします。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>LINE 側で Webhook を無効化しないといけませんか？</summary>
+        <div class="faq-body">
+          <p>必須ではありません。SyncotBase 側のトークンが削除されるため、LINE から Webhook リクエストが届いても SyncotBase は処理できず、エラーを返します。ただし、セキュリティ面からは LINE Developers で「Use webhook」をオフにしておくことを推奨します。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>LINE の Channel 自体を削除したい場合は？</summary>
+        <div class="faq-body">
+          <p>LINE Developers コンソールの該当 Channel の「Basic settings」タブ最下部にある「Delete this channel」から削除できます。ただし <strong>削除は不可逆的です</strong>。Channel を削除すると、紐づいた LINE 公式アカウントとの連携も切れるため、慎重に判断してください。通常は Webhook の無効化と Token の Revoke で十分です。</p>
+          <br>
+          <p style="color:#b91c1c;font-weight:600;">⚠️ LINE 公式アカウント（LINE Official Account Manager 側）は別サービスのため、Channel を削除しても公式アカウントは残ります。</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- フッター -->
+    <div class="footer">
+      © SyncotBase — 医院・整骨院・スタジオ向け予約管理システム
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

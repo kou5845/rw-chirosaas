@@ -8,7 +8,7 @@
  * - Channel Access Token はテキストエリア
  */
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   Save, Loader2, AlertCircle, CheckCircle2,
   Copy, Check, Eye, EyeOff, Unlink,
@@ -36,11 +36,20 @@ export function LineSettingsForm({ tenantSlug, tenantId, lineChannelSecret, line
   useEffect(() => { setMounted(true); }, []);
   const webhookUrl = mounted ? `${window.location.origin}/api/webhook/line/${tenantId}` : "";
 
-  const [copied,          setCopied]          = useState(false);
-  const [showSecret,      setShowSecret]      = useState(false);
+  const [copied,            setCopied]            = useState(false);
+  const [showSecret,        setShowSecret]        = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   const isConnected = !!(lineChannelSecret && lineChannelAccessToken);
+
+  // 解除成功後にダイアログを閉じる
+  const prevSuccess = useRef(false);
+  useEffect(() => {
+    if (disconnectState?.success && !prevSuccess.current) {
+      setConfirmDisconnect(false);
+    }
+    prevSuccess.current = !!disconnectState?.success;
+  }, [disconnectState?.success]);
 
   async function copyWebhook() {
     await navigator.clipboard.writeText(webhookUrl);
@@ -232,7 +241,6 @@ export function LineSettingsForm({ tenantSlug, tenantId, lineChannelSecret, line
               <button
                 type="submit"
                 disabled={isDisconnectPending}
-                onClick={() => setConfirmDisconnect(false)}
                 className="w-full h-10 rounded-xl bg-red-500 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50"
               >
                 {isDisconnectPending ? (
