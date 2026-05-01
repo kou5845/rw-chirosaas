@@ -78,15 +78,13 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // テナント固有のシークレットがあればそれを使い、なければ環境変数にフォールバック
-  const channelSecret =
-    tenant.lineChannelSecret ?? process.env.LINE_CHANNEL_SECRET ?? "";
-  const channelAccessToken =
-    tenant.lineChannelAccessToken ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
+  // LINE 設定が未完了（または解除済み）の場合は 200 で静かに無視する
+  // 500 を返すと LINE プラットフォームがリトライするため、200 で正常終了させる
+  const channelSecret      = tenant.lineChannelSecret      ?? "";
+  const channelAccessToken = tenant.lineChannelAccessToken ?? "";
 
   if (!channelSecret || !channelAccessToken) {
-    console.error(`[webhook/line] tenantId=${tenantId}: LINE 設定が未完了です`);
-    return NextResponse.json({ error: "LINE not configured" }, { status: 500 });
+    return NextResponse.json({ ok: true });
   }
 
   // ── 2. 署名検証 ──────────────────────────────────────────────────
@@ -202,16 +200,7 @@ async function handleTextMessage(
 
   const trimmed = text.trim();
   if (!looksLikePhoneNumber(trimmed)) {
-    // 電話番号以外のメッセージには案内を返す
-    await client.replyMessage({
-      replyToken,
-      messages: [
-        {
-          type: "text",
-          text: "電話番号をお送りください（例: 090-1234-5678）。\nご予約時のお電話番号と照合して連携します。",
-        },
-      ],
-    });
+    // 電話番号以外のメッセージは無視する（通常のLINEチャットを妨げない）
     return;
   }
 
