@@ -11,9 +11,9 @@
 import { useActionState, useEffect, useState } from "react";
 import {
   Save, Loader2, AlertCircle, CheckCircle2,
-  Copy, Check, Eye, EyeOff,
+  Copy, Check, Eye, EyeOff, Unlink,
 } from "lucide-react";
-import { updateLineSettings, type LineSettingsState } from "./actions";
+import { updateLineSettings, disconnectLineSettings, type LineSettingsState, type DisconnectLineState } from "./actions";
 
 type Props = {
   tenantSlug:             string;
@@ -29,17 +29,18 @@ const inputCls =
   "focus:ring-[var(--brand)] focus:border-transparent transition-colors";
 
 export function LineSettingsForm({ tenantSlug, tenantId, lineChannelSecret, lineChannelAccessToken, lineFriendUrl }: Props) {
-  const [state, action, isPending] = useActionState<LineSettingsState, FormData>(
-    updateLineSettings,
-    null,
-  );
+  const [state,           action,           isPending]           = useActionState<LineSettingsState,    FormData>(updateLineSettings,    null);
+  const [disconnectState, disconnectAction, isDisconnectPending] = useActionState<DisconnectLineState, FormData>(disconnectLineSettings, null);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const webhookUrl = mounted ? `${window.location.origin}/api/webhook/line/${tenantId}` : "";
 
-  const [copied,     setCopied]     = useState(false);
-  const [showSecret, setShowSecret] = useState(false);
+  const [copied,          setCopied]          = useState(false);
+  const [showSecret,      setShowSecret]      = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+
+  const isConnected = !!(lineChannelSecret && lineChannelAccessToken);
 
   async function copyWebhook() {
     await navigator.clipboard.writeText(webhookUrl);
@@ -64,6 +65,18 @@ export function LineSettingsForm({ tenantSlug, tenantId, lineChannelSecret, line
         <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
           <span>LINE連携設定を保存しました</span>
+        </div>
+      )}
+      {disconnectState?.success && (
+        <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+          <span>LINE連携を解除しました</span>
+        </div>
+      )}
+      {disconnectState?.errors?.general && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle size={15} className="mt-0.5 shrink-0" />
+          <span>{disconnectState.errors.general}</span>
         </div>
       )}
 
@@ -161,8 +174,20 @@ export function LineSettingsForm({ tenantSlug, tenantId, lineChannelSecret, line
         </p>
       </div>
 
-      {/* ── 保存ボタン ── */}
-      <div className="flex justify-end border-t border-gray-100 pt-4">
+      {/* ── 保存ボタン / 解除ボタン ── */}
+      <div className="flex items-center justify-between border-t border-gray-100 pt-4">
+        {isConnected ? (
+          <button
+            type="button"
+            onClick={() => setConfirmDisconnect(true)}
+            className="flex h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-600 transition-colors hover:bg-red-100"
+          >
+            <Unlink size={15} />
+            LINE連携を解除する
+          </button>
+        ) : (
+          <div />
+        )}
         <button
           type="submit"
           disabled={isPending}
@@ -175,6 +200,49 @@ export function LineSettingsForm({ tenantSlug, tenantId, lineChannelSecret, line
           )}
         </button>
       </div>
+
+      {/* ── 解除確認ダイアログ ── */}
+      {confirmDisconnect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100">
+                <Unlink size={18} className="text-red-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-800">LINE連携を解除しますか？</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Channel Secret・Access Token・友だち追加URLをすべて削除します。解除後はLINE通知が送信されなくなります。
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmDisconnect(false)}
+                className="flex-1 h-10 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                キャンセル
+              </button>
+              <form action={disconnectAction} className="flex-1">
+                <input type="hidden" name="tenantSlug" value={tenantSlug} />
+                <button
+                  type="submit"
+                  disabled={isDisconnectPending}
+                  onClick={() => setConfirmDisconnect(false)}
+                  className="w-full h-10 rounded-xl bg-red-500 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
+                  {isDisconnectPending ? (
+                    <Loader2 size={14} className="animate-spin mx-auto" />
+                  ) : (
+                    "解除する"
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
