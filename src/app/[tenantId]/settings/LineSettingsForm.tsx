@@ -49,6 +49,7 @@ export function LineSettingsForm({ tenantSlug, tenantId, lineChannelSecret, line
   }
 
   return (
+    <>
     <form action={action} className="px-6 py-5 space-y-5">
       <input type="hidden" name="tenantSlug" value={tenantSlug} />
 
@@ -201,48 +202,50 @@ export function LineSettingsForm({ tenantSlug, tenantId, lineChannelSecret, line
         </button>
       </div>
 
-      {/* ── 解除確認ダイアログ ── */}
-      {confirmDisconnect && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-6 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100">
-                <Unlink size={18} className="text-red-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-gray-800">LINE連携を解除しますか？</p>
-                <p className="mt-1 text-sm text-gray-500">
-                  Channel Secret・Access Token・友だち追加URLをすべて削除します。解除後はLINE通知が送信されなくなります。
-                </p>
-              </div>
+    </form>
+
+    {/* ── 解除確認ダイアログ（メインformの外に配置） ── */}
+    {confirmDisconnect && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+        <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100">
+              <Unlink size={18} className="text-red-600" />
             </div>
-            <div className="flex gap-2.5 pt-1">
-              <button
-                type="button"
-                onClick={() => setConfirmDisconnect(false)}
-                className="flex-1 h-10 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                キャンセル
-              </button>
-              <form action={disconnectAction} className="flex-1">
-                <input type="hidden" name="tenantSlug" value={tenantSlug} />
-                <button
-                  type="submit"
-                  disabled={isDisconnectPending}
-                  onClick={() => setConfirmDisconnect(false)}
-                  className="w-full h-10 rounded-xl bg-red-500 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50"
-                >
-                  {isDisconnectPending ? (
-                    <Loader2 size={14} className="animate-spin mx-auto" />
-                  ) : (
-                    "解除する"
-                  )}
-                </button>
-              </form>
+            <div>
+              <p className="font-semibold text-gray-800">LINE連携を解除しますか？</p>
+              <p className="mt-1 text-sm text-gray-500">
+                Channel Secret・Access Token・友だち追加URLをすべて削除します。解除後はLINE通知が送信されなくなります。
+              </p>
             </div>
           </div>
+          <div className="flex gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={() => setConfirmDisconnect(false)}
+              className="flex-1 h-10 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              キャンセル
+            </button>
+            <form action={disconnectAction} className="flex-1">
+              <input type="hidden" name="tenantSlug" value={tenantSlug} />
+              <button
+                type="submit"
+                disabled={isDisconnectPending}
+                onClick={() => setConfirmDisconnect(false)}
+                className="w-full h-10 rounded-xl bg-red-500 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {isDisconnectPending ? (
+                  <Loader2 size={14} className="animate-spin mx-auto" />
+                ) : (
+                  "解除する"
+                )}
+              </button>
+            </form>
+          </div>
         </div>
-      )}
-    </form>
+      </div>
+    )}
+    </>
   );
 }
