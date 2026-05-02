@@ -99,7 +99,13 @@ function buildBusinessHours(tenantId: string) {
   }));
 }
 
-async function seedTenant(config: typeof YAMADA, features: typeof YAMADA_FEATURES) {
+type TenantConfig = {
+  name: string; subdomain: string; plan: "pro" | "standard";
+  phone: string; address: string; loginId: string; email: string; password: string;
+  lineChannelSecret: string | null; lineChannelAccessToken: string | null; lineFriendUrl: string | null;
+};
+
+async function seedTenant(config: TenantConfig, features: { key: string; value: string }[]) {
   console.log(`\n📋 ${config.name} を作成中...`);
 
   // 既存チェック
