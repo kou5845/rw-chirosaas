@@ -55,20 +55,21 @@ export function SettingsTabsClient({ tabs, panels }: Props) {
   );
 
   return (
-    <Tabs value={activeTab} onValueChange={handleTabChange}>
-      {/* ── 左カラム: タブナビ ── */}
-      <TabsList className="w-44 shrink-0 gap-0.5 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm">
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-col gap-4 md:flex-row md:gap-6">
+      {/* ── タブナビ（モバイル: 横スクロール / デスクトップ: 縦カラム）── */}
+      <TabsList className="w-full flex-row overflow-x-auto gap-0.5 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm md:w-44 md:flex-col md:shrink-0">
         {tabs.map((tab) => (
           <TabsTrigger
             key={tab.id}
             value={tab.id}
             className="
-              flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5
+              flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5
               text-sm font-medium text-gray-500 transition-colors
               hover:bg-[var(--brand-bg)] hover:text-[var(--brand-dark)]
               data-[state=active]:bg-[var(--brand-bg)]
               data-[state=active]:text-[var(--brand-darker)]
               data-[state=active]:font-semibold
+              md:w-full
             "
           >
             <span className="shrink-0">{tab.icon}</span>
