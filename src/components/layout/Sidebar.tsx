@@ -8,6 +8,7 @@ import {
   Users,
   Dumbbell,
   Syringe,
+  BarChart2,
   Settings,
   ChevronRight,
 } from "lucide-react";
@@ -23,10 +24,11 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "ダッシュボード", href: "dashboard",    icon: LayoutDashboard },
-  { label: "予約一覧",       href: "appointments", icon: CalendarDays },
-  { label: "患者管理",       href: "patients",     icon: Users },
-  { label: "施術メニュー管理",   href: "services",     icon: Syringe },
+  { label: "ダッシュボード",         href: "dashboard",    icon: LayoutDashboard },
+  { label: "予約一覧",               href: "appointments", icon: CalendarDays },
+  { label: "患者管理",               href: "patients",     icon: Users },
+  { label: "予約分析",               href: "analytics",    icon: BarChart2 },
+  { label: "施術メニュー管理",       href: "services",     icon: Syringe },
   {
     label:      "トレーニングメニュー管理",
     href:       "trainings",
