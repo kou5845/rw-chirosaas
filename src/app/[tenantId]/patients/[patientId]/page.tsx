@@ -275,11 +275,11 @@ export default async function PatientDetailPage({ params }: Props) {
         <span className="text-sm font-medium text-gray-700">{patient.displayName}</span>
       </div>
 
-      {/* ── メイン2カラムレイアウト ── */}
-      <div className="flex gap-6 items-start">
+      {/* ── メイン2カラムレイアウト（モバイルは縦積み）── */}
+      <div className="flex flex-col gap-6 md:flex-row md:items-start">
 
-        {/* ══ 左カラム: 患者基本情報（320px固定）══ */}
-        <aside className="w-80 shrink-0 space-y-4">
+        {/* ══ 左カラム: 患者基本情報（デスクトップ320px固定・モバイル全幅）══ */}
+        <aside className="w-full shrink-0 space-y-4 md:w-80">
 
           {/* プロフィールカード */}
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">

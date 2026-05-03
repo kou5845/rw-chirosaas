@@ -104,8 +104,8 @@ export default async function PatientsPage({ params, searchParams }: Props) {
       {/* ── 患者テーブル ── */}
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
 
-        {/* テーブルヘッダー */}
-        <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_auto] items-center gap-4 border-b border-gray-100 bg-gray-50/60 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        {/* テーブルヘッダー（デスクトップのみ）*/}
+        <div className="hidden md:grid md:grid-cols-[2fr_1.5fr_1fr_1fr_auto] items-center gap-4 border-b border-gray-100 bg-gray-50/60 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
           <span>患者情報</span>
           <span>電話番号</span>
           <span>最終来院日</span>
@@ -149,10 +149,10 @@ export default async function PatientsPage({ params, searchParams }: Props) {
                 <Link
                   key={patient.id}
                   href={`/${slug}/patients/${patient.id}`}
-                  className="grid grid-cols-[2fr_1.5fr_1fr_1fr_auto] items-center gap-4 px-6 py-4 transition-colors hover:bg-[var(--brand-hover)]"
+                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--brand-hover)] md:grid md:grid-cols-[2fr_1.5fr_1fr_1fr_auto] md:gap-4 md:px-6 md:py-4"
                 >
-                  {/* 患者情報（アバター + 名前 + ID）*/}
-                  <div className="flex min-w-0 items-center gap-3">
+                  {/* 患者情報（アバター + 名前 + ID）— モバイルでは flex-1 で全幅 */}
+                  <div className="flex min-w-0 flex-1 items-center gap-3 md:flex-none">
                     {/* アバター */}
                     <div
                       className={cn(
@@ -169,7 +169,7 @@ export default async function PatientsPage({ params, searchParams }: Props) {
                       <p className="truncate text-sm font-semibold text-gray-800">
                         {patient.displayName}
                       </p>
-                      <div className="mt-0.5 flex items-center gap-2">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
                         <span className="text-[11px] font-mono text-gray-400">
                           {formatPatientId(patient.id)}
                         </span>
@@ -179,12 +179,19 @@ export default async function PatientsPage({ params, searchParams }: Props) {
                             {apptCount}件
                           </span>
                         )}
+                        {/* モバイルのみ: 電話番号をここに表示 */}
+                        {patient.phone && (
+                          <span className="flex items-center gap-1 text-[11px] text-gray-500 md:hidden">
+                            <Phone size={10} />
+                            {patient.phone}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  {/* 電話番号 */}
-                  <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                  {/* 電話番号（デスクトップのみ）*/}
+                  <div className="hidden items-center gap-1.5 text-sm text-gray-600 md:flex">
                     {patient.phone ? (
                       <>
                         <Phone size={13} className="shrink-0 text-gray-400" />
@@ -195,19 +202,19 @@ export default async function PatientsPage({ params, searchParams }: Props) {
                     )}
                   </div>
 
-                  {/* 最終来院日 */}
-                  <div className="text-sm">
+                  {/* 最終来院日（デスクトップのみ）*/}
+                  <div className="hidden text-sm md:block">
                     {lastVisit ? (
                       <span className="text-gray-600">
                         {formatDateJa(lastVisit)}
                       </span>
                     ) : (
-                      <span className="text-gray-300 text-xs">来院歴なし</span>
+                      <span className="text-xs text-gray-300">来院歴なし</span>
                     )}
                   </div>
 
-                  {/* LINE 連携バッジ */}
-                  <div>
+                  {/* LINE 連携バッジ（デスクトップのみ）*/}
+                  <div className="hidden md:block">
                     {hasLine ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-[#00C300]/30 bg-[#00C300]/10 px-2.5 py-1 text-[11px] font-semibold text-[#00830B]">
                         <MessageCircle size={11} />
@@ -221,7 +228,7 @@ export default async function PatientsPage({ params, searchParams }: Props) {
                   </div>
 
                   {/* 詳細矢印 */}
-                  <ChevronRight size={16} className="text-gray-300" />
+                  <ChevronRight size={16} className="shrink-0 text-gray-300" />
                 </Link>
               );
             })}
