@@ -28,6 +28,7 @@ const PUBLIC_PREFIXES = [
   "/login",
   "/forgot-password",
   "/reset-password",
+  "/privacy",
   "/api/auth",
   "/api/cron",
   "/api/test-line",
