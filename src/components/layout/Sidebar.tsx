@@ -46,9 +46,13 @@ type Props = {
   loginId?:        string;
   /** training_record フィーチャートグルの値 */
   trainingEnabled: boolean;
+  /** モバイルでサイドバーが開いているか */
+  isOpen?:         boolean;
+  /** モバイルで閉じるときのコールバック */
+  onClose?:        () => void;
 };
 
-export function Sidebar({ tenantSlug, tenantName, loginId, trainingEnabled }: Props) {
+export function Sidebar({ tenantSlug, tenantName, loginId, trainingEnabled, isOpen = false, onClose }: Props) {
   const pathname = usePathname();
 
   const isActive = (href: string) =>
@@ -68,6 +72,7 @@ export function Sidebar({ tenantSlug, tenantName, loginId, trainingEnabled }: Pr
       <li key={item.href}>
         <Link
           href={`/${tenantSlug}/${item.href}`}
+          onClick={onClose}
           className={cn(
             "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
             active
@@ -105,7 +110,12 @@ export function Sidebar({ tenantSlug, tenantName, loginId, trainingEnabled }: Pr
 
   return (
     <aside
-      className="relative flex h-full flex-col border-r border-gray-100 bg-white"
+      className={cn(
+        "relative flex h-full flex-col border-r border-gray-100 bg-white transition-transform duration-200",
+        // モバイル: fixed overlay、デスクトップ: 通常レイアウト
+        "fixed inset-y-0 left-0 z-30 md:relative md:translate-x-0",
+        isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+      )}
       style={{ width: "var(--sidebar-width)" }}
     >
       {/* ── ヘッダー: テナント名 ── */}

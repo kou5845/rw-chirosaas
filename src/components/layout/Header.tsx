@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, ChevronRight } from "lucide-react";
+import { Bell, ChevronRight, Menu } from "lucide-react";
 
 /** パスセグメントから日本語のページタイトルを返す */
 function resolvePageTitle(pathname: string): { label: string; sub?: string } {
@@ -21,16 +21,26 @@ type Props = {
   tenantName: string;
   /** 承認待ち件数（バッジ表示用） */
   pendingCount?: number;
+  /** モバイルのハンバーガーボタン押下時のコールバック */
+  onMenuToggle?: () => void;
 };
 
-export function Header({ tenantName, pendingCount = 0 }: Props) {
+export function Header({ tenantName, pendingCount = 0, onMenuToggle }: Props) {
   const pathname = usePathname();
   const { label, sub } = resolvePageTitle(pathname);
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-100 bg-white px-6">
-      {/* ── 左: パンくず + タイトル ── */}
+    <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-100 bg-white px-4 md:px-6">
+      {/* ── 左: ハンバーガー(モバイル) + パンくず + タイトル ── */}
       <div className="flex items-center gap-2 text-sm text-gray-400">
+        {/* モバイル用ハンバーガーボタン */}
+        <button
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 md:hidden"
+          onClick={onMenuToggle}
+          aria-label="メニューを開く"
+        >
+          <Menu size={20} />
+        </button>
         <span className="font-medium text-gray-600">{tenantName}</span>
         <ChevronRight size={14} />
         <span className="font-semibold text-gray-800">{label}</span>

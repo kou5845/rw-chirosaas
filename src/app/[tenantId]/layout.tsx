@@ -11,8 +11,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getTenantBySlug, getTenantFeatures } from "@/lib/tenant-cache";
 import { auth } from "@/auth";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
+import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Toaster } from "sonner";
 
 type Props = {
@@ -45,21 +44,17 @@ export default async function DashboardLayout({ children, params }: Props) {
   ]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F9FAFB]">
-      {/* サイドバー */}
-      <Sidebar
+    <>
+      <DashboardShell
         tenantSlug={slug}
         tenantName={tenant.name}
         loginId={session?.user?.loginId}
         trainingEnabled={features.trainingEnabled}
-      />
-
-      {/* メインエリア */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header tenantName={tenant.name} pendingCount={pendingCount} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
+        pendingCount={pendingCount}
+      >
+        {children}
+      </DashboardShell>
       <Toaster richColors position="bottom-right" />
-    </div>
+    </>
   );
 }
