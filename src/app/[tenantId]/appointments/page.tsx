@@ -17,12 +17,15 @@ import {
   Archive,
   Inbox,
   CalendarDays,
+  CalendarRange,
   List,
   XCircle,
 } from "lucide-react";
 import {
   startOfWeek,
   endOfWeek,
+  startOfMonth,
+  endOfMonth,
   addDays,
   parseISO,
   isValid,
@@ -32,6 +35,7 @@ import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
 import { type SerializedAppointment, type BusinessHourData } from "@/components/appointments/WeeklyCalendar";
 import { AppointmentsWeekView } from "@/components/appointments/AppointmentsWeekView";
+import { MonthlyCalendar } from "@/components/appointments/MonthlyCalendar";
 import { AppointmentListCard, type ListAppointment } from "./AppointmentListCard";
 import { PendingApprovalList } from "./PendingApprovalList";
 import type { AppointmentStatus } from "@prisma/client";
@@ -39,7 +43,7 @@ import type { ServiceItem, ExerciseItem } from "@/components/appointments/NewApp
 
 type Props = {
   params:       Promise<{ tenantId: string }>;
-  searchParams: Promise<{ view?: string; tab?: string; week?: string }>;
+  searchParams: Promise<{ view?: string; tab?: string; week?: string; month?: string }>;
 };
 
 type Tab = "pending" | "confirmed" | "archive" | "rejected";
@@ -47,10 +51,12 @@ type Tab = "pending" | "confirmed" | "archive" | "rejected";
 // ── 日時フォーマット（ビュー切替URLで使用）──────────────────────
 
 export default async function AppointmentsPage({ params, searchParams }: Props) {
-  const { tenantId: slug }       = await params;
-  const { view, tab, week }      = await searchParams;
+  const { tenantId: slug }            = await params;
+  const { view, tab, week, month }    = await searchParams;
 
-  const isWeekView = view !== "list";
+  const currentView = view === "list" ? "list" : view === "month" ? "month" : "week";
+  const isWeekView  = currentView === "week";
+  const isMonthView = currentView === "month";
   const activeTab: Tab =
     tab === "confirmed" ? "confirmed" :
     tab === "archive"   ? "archive"   :
@@ -104,7 +110,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
       select:  { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    // 患者一覧（週間ビューの新規予約モーダルのみ、isWeekView に関係なく取得して後でフィルタ）
+    // 患者一覧（週間ビューの新規予約モーダルのみ）
     isWeekView
       ? prisma.patient.findMany({
           where:   { tenantId: tenant.id },
@@ -176,6 +182,49 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
     }));
   }
 
+  // ── 月間ビュー用データ ────────────────────────────────────────
+  let monthStr = "";
+  let monthlyAppointments: SerializedAppointment[] = [];
+
+  if (isMonthView) {
+    const baseDate = month && /^\d{4}-\d{2}$/.test(month)
+      ? parseISO(month + "-01")
+      : new Date();
+    const mStart  = startOfMonth(baseDate);
+    const mEnd    = endOfMonth(baseDate);
+    // カレンダーグリッドはパディング週を含む（月曜始まり）
+    const calStart = startOfWeek(mStart, { weekStartsOn: 1 });
+    const calEnd   = endOfWeek(mEnd,     { weekStartsOn: 1 });
+    monthStr = format(mStart, "yyyy-MM");
+
+    const rawAppts = await prisma.appointment.findMany({
+      where: {
+        tenantId: tenant.id, // CLAUDE.md 絶対ルール
+        startAt:  { gte: calStart, lte: addDays(calEnd, 1) },
+        status:   { in: ["pending", "confirmed", "completed"] },
+      },
+      include: {
+        patient: { select: { id: true, displayName: true } },
+        staff:   { select: { name: true } },
+      },
+      orderBy: { startAt: "asc" },
+    });
+
+    monthlyAppointments = rawAppts.map((a) => ({
+      id:          a.id,
+      status:      a.status,
+      startAt:     a.startAt.toISOString(),
+      endAt:       a.endAt.toISOString(),
+      menuName:    a.menuName,
+      durationMin: a.durationMin,
+      price:       a.price,
+      patientId:   a.patient.id,
+      patientName: a.patient.displayName,
+      staffName:   a.staff?.name ?? null,
+      note:        a.note ?? null,
+    }));
+  }
+
   // ── リストビュー用データ ──────────────────────────────────────
   let listAppointments: Awaited<ReturnType<typeof prisma.appointment.findMany<{
     include: { patient: { select: { id: true; displayName: true } }; staff:   { select: { name: true } } };
@@ -184,7 +233,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   let archiveCount   = 0;
   let rejectedCount  = 0;
 
-  if (!isWeekView) {
+  if (currentView === "list") {
     // endAt は @db.Timestamptz（UTC保存）。new Date() も UTC のため、
     // JST 変換なしに直接比較して正確な時刻判定が可能。
     const now = new Date();
@@ -246,7 +295,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
   }
 
   return (
-    <div className={cn("mx-auto space-y-5", isWeekView ? "max-w-full" : "max-w-3xl")}>
+    <div className={cn("mx-auto space-y-5", currentView !== "list" ? "max-w-full" : "max-w-3xl")}>
 
       {/* ── ページヘッダー ── */}
       <div className="flex items-center justify-between">
@@ -278,10 +327,22 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
             <span className="hidden sm:inline">週間</span>
           </Link>
           <Link
+            href={`/${slug}/appointments?view=month&month=${monthStr || format(new Date(), "yyyy-MM")}`}
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all",
+              isMonthView
+                ? "bg-[var(--brand-bg)] text-[var(--brand-dark)] shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <CalendarRange size={14} />
+            <span className="hidden sm:inline">月間</span>
+          </Link>
+          <Link
             href={`/${slug}/appointments?view=list`}
             className={cn(
               "flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all",
-              !isWeekView
+              currentView === "list"
                 ? "bg-[var(--brand-bg)] text-[var(--brand-dark)] shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             )}
@@ -296,6 +357,15 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
           </Link>
         </div>
       </div>
+
+      {/* ══ 月間カレンダービュー ══ */}
+      {isMonthView && (
+        <MonthlyCalendar
+          monthStr={monthStr || format(new Date(), "yyyy-MM")}
+          appointments={monthlyAppointments}
+          slug={slug}
+        />
+      )}
 
       {/* ══ 週間カレンダービュー ══ */}
       {isWeekView && (
@@ -318,7 +388,7 @@ export default async function AppointmentsPage({ params, searchParams }: Props) 
       )}
 
       {/* ══ リストビュー ══ */}
-      {!isWeekView && (
+      {currentView === "list" && (
         <>
           {/* タブバー */}
           <nav className="flex gap-1 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-sm">
