@@ -15,6 +15,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { createReservation, updateReservationStatus } from "@/services/reservationService";
 
 export type CreateAppointmentState = {
@@ -114,10 +116,10 @@ export async function createAppointment(
 
   // ── 管理画面からの作成は即時確定 + 確定通知を送信 ──
   // AppointmentLog への記録も updateReservationStatus 内で行われる
-  const adminProfile = await prisma.profile.findFirst({
-    where:  { tenantId, role: "admin", isActive: true },
-    select: { id: true },
-  });
+  const session = await auth();
+  const adminProfile = session?.user?.id
+    ? await getOrCreateProfile(session.user.id, tenantId)
+    : null;
   if (adminProfile) {
     const confirmResult = await updateReservationStatus({
       appointmentId: result.appointmentId,

@@ -7,6 +7,7 @@
  *   - 全 Prisma クエリに tenantId を含めること（絶対ルール）
  *   - ステータス変更は必ず AppointmentLog に記録すること（絶対ルール）
  *   - require_approval: pending → confirmed の順は不変
+ *   - tenantId はセッション由来の値のみ使用（フォームデータ不使用）
  *
  * DB更新・AppointmentLog記録・LINE即時送信はすべて
  * reservationService.updateReservationStatus に委譲する。
@@ -14,6 +15,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { updateReservationStatus, rejectReservation } from "@/services/reservationService";
 import { messagingApi } from "@line/bot-sdk";
 import { buildConfirmationMessage } from "@/lib/line";
@@ -26,21 +29,22 @@ export async function confirmAppointment(
   formData: FormData
 ): Promise<ConfirmActionState> {
   const appointmentId = formData.get("appointmentId") as string;
-  const tenantId      = formData.get("tenantId")      as string;
   const tenantSlug    = formData.get("tenantSlug")    as string;
 
-  if (!appointmentId || !tenantId || !tenantSlug) {
+  // tenantId はセッション由来のみ使用（CLAUDE.md 絶対ルール）
+  const session = await auth();
+  const tenantId = session?.user?.tenantId;
+  if (!session?.user?.id || !tenantId) {
+    return { error: "ログインセッションが無効です。再ログインしてください。" };
+  }
+
+  if (!appointmentId || !tenantSlug) {
     return { error: "必要なパラメータが不足しています。" };
   }
 
-  // Auth 未実装のため、当該テナントの最初の admin プロフィールを changedBy に使用。
-  // TODO: Supabase Auth 実装後は session.user.id に差し替えること。
-  const adminProfile = await prisma.profile.findFirst({
-    where:  { tenantId, role: "admin", isActive: true },
-    select: { id: true },
-  });
+  const adminProfile = await getOrCreateProfile(session.user.id, tenantId);
   if (!adminProfile) {
-    return { error: "管理者プロフィールが見つかりません。シードデータをご確認ください。" };
+    return { error: "ユーザー情報が見つかりません。管理者にお問い合わせください。" };
   }
 
   // DB更新 + AppointmentLog記録 + LINE確定通知をサービスに委譲
@@ -72,19 +76,22 @@ export async function rejectAppointment(
   formData: FormData
 ): Promise<RejectActionState> {
   const appointmentId = formData.get("appointmentId") as string;
-  const tenantId      = formData.get("tenantId")      as string;
   const tenantSlug    = formData.get("tenantSlug")    as string;
 
-  if (!appointmentId || !tenantId || !tenantSlug) {
+  // tenantId はセッション由来のみ使用（CLAUDE.md 絶対ルール）
+  const session = await auth();
+  const tenantId = session?.user?.tenantId;
+  if (!session?.user?.id || !tenantId) {
+    return { error: "ログインセッションが無効です。再ログインしてください。" };
+  }
+
+  if (!appointmentId || !tenantSlug) {
     return { error: "必要なパラメータが不足しています。" };
   }
 
-  const adminProfile = await prisma.profile.findFirst({
-    where:  { tenantId, role: "admin", isActive: true },
-    select: { id: true },
-  });
+  const adminProfile = await getOrCreateProfile(session.user.id, tenantId);
   if (!adminProfile) {
-    return { error: "管理者プロフィールが見つかりません。" };
+    return { error: "ユーザー情報が見つかりません。管理者にお問い合わせください。" };
   }
 
   const result = await rejectReservation({
@@ -116,20 +123,23 @@ export type BulkApproveResult =
  */
 export async function bulkApproveAppointments(
   appointmentIds: string[],
-  tenantId:        string,
+  _tenantId:       string, // 後方互換のため残すが使用しない
   tenantSlug:      string,
 ): Promise<BulkApproveResult> {
   if (appointmentIds.length === 0) {
     return { success: true, approvedCount: 0 };
   }
 
-  // テナント照合 + 対象予約の検証（CLAUDE.md 絶対ルール: tenantId フィルタ）
-  const adminProfile = await prisma.profile.findFirst({
-    where:  { tenantId, role: "admin", isActive: true },
-    select: { id: true },
-  });
+  // tenantId はセッション由来のみ使用（CLAUDE.md 絶対ルール）
+  const session = await auth();
+  const tenantId = session?.user?.tenantId;
+  if (!session?.user?.id || !tenantId) {
+    return { success: false, error: "ログインセッションが無効です。再ログインしてください。" };
+  }
+
+  const adminProfile = await getOrCreateProfile(session.user.id, tenantId);
   if (!adminProfile) {
-    return { success: false, error: "管理者プロフィールが見つかりません。" };
+    return { success: false, error: "ユーザー情報が見つかりません。管理者にお問い合わせください。" };
   }
 
   // pending かつ自テナントの予約のみ対象（通知用に patient・tenant も取得）
