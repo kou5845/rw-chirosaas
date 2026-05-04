@@ -12,6 +12,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { updateReservationStatus } from "@/services/reservationService";
 import { sendUpdateNotification } from "@/lib/notificationService";
 
@@ -191,10 +193,10 @@ export async function upsertAppointment(
       });
 
       // ── 即時確定（AppointmentLog 記録 + 条件付き通知）──
-      const adminProfile = await prisma.profile.findFirst({
-        where:  { tenantId, role: "admin", isActive: true },
-        select: { id: true },
-      });
+      const session = await auth();
+      const adminProfile = session?.user?.id
+        ? await getOrCreateProfile(session.user.id, tenantId)
+        : null;
       if (adminProfile) {
         const logNote = sendNotification
           ? "管理画面から作成（通知あり）"
